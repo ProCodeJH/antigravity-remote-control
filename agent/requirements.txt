@@ -1,0 +1,51 @@
+# ========================================
+# ULTRA FUSION Antigravity Agent
+# ========================================
+# 17개 모듈 전체 의존성
+
+# === Core ===
+websockets>=12.0
+pyautogui>=0.9.54
+mss>=9.0.1
+Pillow>=10.0.0
+psutil>=5.9.0
+aiohttp>=3.9.0
+numpy>=1.24.0
+
+# === Phase 1: Differential Compression ===
+zstandard>=0.22.0
+
+# === Phase 2: WebRTC P2P ===
+aiortc>=1.6.0
+av>=11.0.0
+
+# === Phase 3: GPU Capture ===
+dxcam>=0.4.0
+
+# === ULTRA U1: Hardware Codec ===
+# (included in av)
+
+# === ULTRA U3: Voice Control ===
+SpeechRecognition>=3.10.0
+
+# === ULTRA U6: Audio Streaming ===
+soundcard>=0.4.0
+
+# === ULTRA U7: Clipboard Sync ===
+pyperclip>=1.8.0
+pywin32>=306
+
+# === ULTRA U8: Macro Engine ===
+pyyaml>=6.0.0
+
+# === ULTRA: OCR Button Detection ===
+easyocr>=1.7.0
+
+# === Repo2: Stream Engine ===
+opencv-python>=4.8.0
+uvicorn>=0.24.0
+fastapi>=0.104.0
+
+# === Repo2: Window Controller ===
+pygetwindow>=0.0.9
+keyboard>=0.13.5

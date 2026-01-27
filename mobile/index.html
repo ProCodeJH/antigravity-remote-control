@@ -1,0 +1,2251 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>Antigravity Remote Control</title>
+    <!-- PWA manifest disabled - icons not required for local testing -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #14141f;
+            --bg-glass: rgba(20, 20, 35, 0.85);
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.3);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 56px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--danger);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: var(--success);
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        /* Main Content */
+        .main {
+            padding-top: 56px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Screen Viewer */
+        .screen-container {
+            flex: 1;
+            position: relative;
+            background: #000;
+            overflow: hidden;
+        }
+
+        #remoteScreen {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #111;
+        }
+
+        .screen-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: auto;
+        }
+
+        /* Quick Action Bar */
+        .quick-bar {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            border: 1px solid var(--border);
+        }
+
+        .quick-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: none;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-btn:active {
+            transform: scale(0.9);
+            background: var(--accent);
+        }
+
+        .quick-btn.active {
+            background: var(--accent);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        /* Bottom Nav */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-around;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .nav-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 11px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .nav-item.active {
+            color: var(--accent);
+        }
+
+        .nav-icon {
+            font-size: 22px;
+        }
+
+        /* Panels */
+        .panel {
+            display: none;
+            position: fixed;
+            top: 56px;
+            left: 0;
+            right: 0;
+            bottom: 70px;
+            background: var(--bg-primary);
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        /* Virtual Keyboard */
+        .keyboard {
+            display: none;
+            position: fixed;
+            bottom: 70px;
+            left: 0;
+            right: 0;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border);
+            padding: 8px;
+        }
+
+        .keyboard.visible {
+            display: block;
+        }
+
+        .keyboard-row {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+
+        .key {
+            min-width: 32px;
+            height: 42px;
+            border-radius: 6px;
+            border: none;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            flex: 1;
+            max-width: 50px;
+        }
+
+        .key.wide {
+            flex: 2;
+            max-width: 100px;
+        }
+
+        .key:active {
+            background: var(--accent);
+        }
+
+        .key.modifier.active {
+            background: var(--accent);
+        }
+
+        /* Status Cards */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .status-card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .status-card .label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .status-card .value {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        /* Connect Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .modal.visible {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border-radius: 24px;
+            padding: 32px;
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid var(--border);
+        }
+
+        .modal h2 {
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 16px;
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 16px;
+            border-radius: 12px;
+            border: none;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+        }
+
+        /* Chat Panel */
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding-bottom: 80px;
+        }
+
+        .chat-input-container {
+            position: fixed;
+            bottom: 70px;
+            left: 0;
+            right: 0;
+            padding: 12px 16px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 12px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 24px;
+            border: 1px solid var(--border);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 16px;
+        }
+
+        .chat-send {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: none;
+            background: var(--accent);
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        /* Log Viewer */
+        .log-container {
+            background: #111;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: 'Fira Code', monospace;
+            font-size: 11px;
+            max-height: 200px;
+            overflow-y: auto;
+            color: #6ee7b7;
+        }
+
+        /* File Drop Zone */
+        .file-drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            text-align: center;
+            margin-top: 16px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .file-drop-zone.dragover {
+            border-color: var(--accent);
+            background: var(--accent-glow);
+        }
+
+        .file-drop-zone .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .file-drop-zone p {
+            color: var(--text-secondary);
+            margin: 0;
+        }
+
+        /* File Transfer Progress */
+        .file-transfer-item {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .file-transfer-item .file-icon {
+            font-size: 24px;
+        }
+
+        .file-transfer-item .file-info {
+            flex: 1;
+        }
+
+        .file-transfer-item .file-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .file-transfer-item .file-size {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: var(--bg-primary);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-bar .fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #8b5cf6);
+            transition: width 0.2s;
+        }
+
+        .file-transfer-item .cancel-btn {
+            background: none;
+            border: none;
+            color: var(--danger);
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        /* Device Selection Cards */
+        .device-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 16px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .device-card {
+            background: var(--bg-secondary);
+            border: 2px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .device-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .device-card.selected {
+            border-color: var(--success);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .device-card .device-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .device-card .device-info {
+            flex: 1;
+        }
+
+        .device-card .device-name {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+
+        .device-card .device-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .device-card .device-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+
+        .device-card .device-status.offline {
+            background: var(--danger);
+            box-shadow: 0 0 8px var(--danger);
+        }
+
+        /* OCR Button Overlay */
+        .ocr-button-overlay {
+            position: absolute;
+            border: 2px solid var(--accent);
+            background: rgba(99, 102, 241, 0.2);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: white;
+            font-weight: 600;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+        }
+
+        .ocr-button-overlay:hover {
+            background: rgba(99, 102, 241, 0.4);
+            transform: scale(1.05);
+        }
+
+        /* Command History */
+        .command-history {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .command-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .command-item .status-icon {
+            font-size: 16px;
+        }
+
+        .command-item .command-text {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .command-item .command-time {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* OCR Detect Button */
+        .ocr-fab {
+            position: fixed;
+            bottom: 140px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+            z-index: 100;
+            transition: all 0.3s;
+        }
+
+        .ocr-fab:hover {
+            transform: scale(1.1);
+        }
+
+        .ocr-fab.loading {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">⚡ Antigravity</div>
+        <div class="status-indicator">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Disconnected</span>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Screen Panel (Default) -->
+        <div class="panel active" id="screenPanel">
+            <div class="screen-container">
+                <canvas id="remoteScreen"></canvas>
+                <div class="screen-overlay" id="screenOverlay"></div>
+            </div>
+        </div>
+
+        <!-- Status Panel -->
+        <div class="panel" id="statusPanel">
+            <h3 style="margin-bottom: 16px;">🖥️ Connected Devices</h3>
+            <div class="device-container" id="deviceContainer">
+                <div style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                    Loading devices...
+                </div>
+            </div>
+
+            <h3 style="margin: 24px 0 16px;">📊 System Status</h3>
+            <div class="status-grid">
+                <div class="status-card">
+                    <div class="label">CPU Usage</div>
+                    <div class="value" id="cpuUsage">--%</div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Memory</div>
+                    <div class="value" id="memUsage">--GB</div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Battery</div>
+                    <div class="value" id="battery">--%</div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Latency</div>
+                    <div class="value" id="latency">--ms</div>
+                </div>
+            </div>
+
+            <h3 style="margin: 24px 0 16px;">🤖 Antigravity</h3>
+            <div class="status-card" style="grid-column: span 2;">
+                <div class="label">Status</div>
+                <div class="value" id="agStatus" style="font-size: 16px;">--</div>
+            </div>
+
+            <h3 style="margin: 24px 0 16px;">📋 Connection Logs</h3>
+            <div class="log-container" id="logContainer"></div>
+
+            <h3 style="margin: 24px 0 16px;">📁 File Transfer</h3>
+            <div class="file-drop-zone" id="fileDropZone">
+                <div class="icon">📤</div>
+                <p>Drag & drop files here or tap to select</p>
+                <input type="file" id="fileInput" style="display: none;" multiple>
+            </div>
+            <div id="fileTransferList"></div>
+        </div>
+
+        <!-- Chat Panel -->
+        <div class="panel" id="chatPanel">
+            <div class="chat-messages" id="chatMessages">
+                <p style="color: var(--text-secondary); text-align: center; margin-top: 32px;">
+                    Send commands to Antigravity
+                </p>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" class="chat-input" id="chatInput" placeholder="Enter command...">
+                <button class="chat-send" id="chatSend">➤</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- OCR Button Detection FAB -->
+    <button class="ocr-fab" id="ocrFab" title="Detect Clickable Buttons">🔍</button>
+
+    <!-- Quick Action Bar -->
+    <div class="quick-bar" id="quickBar">
+        <button class="quick-btn" id="btnRightClick" title="Right Click">🖱️</button>
+        <button class="quick-btn" id="btnKeyboard" title="Keyboard">⌨️</button>
+        <button class="quick-btn" id="btnEsc" title="ESC">✕</button>
+        <button class="quick-btn" id="btnTab" title="TAB">⇥</button>
+        <button class="quick-btn" id="btnEnter" title="Enter">↵</button>
+    </div>
+
+    <!-- ULTRA Features Bar -->
+    <div class="ultra-bar" id="ultraBar"
+        style="position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; background: rgba(15, 23, 42, 0.95); padding: 8px 16px; border-radius: 24px; border: 1px solid rgba(99, 102, 241, 0.3); backdrop-filter: blur(20px);">
+        <button class="ultra-btn" id="btnVoice" title="Voice Control"
+            style="width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #8b5cf6, #6366f1); border: none; color: white; font-size: 20px; cursor: pointer;">🎤</button>
+        <button class="ultra-btn" id="btnClipboard" title="Clipboard Sync"
+            style="width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; font-size: 20px; cursor: pointer;">📋</button>
+        <button class="ultra-btn" id="btnMacro" title="Macros"
+            style="width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b, #d97706); border: none; color: white; font-size: 20px; cursor: pointer;">⚡</button>
+        <button class="ultra-btn" id="btnAudio" title="Audio Stream"
+            style="width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #ec4899, #db2777); border: none; color: white; font-size: 20px; cursor: pointer;">🔊</button>
+        <button class="ultra-btn" id="btnGesture" title="Gesture Mode"
+            style="width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #06b6d4, #0891b2); border: none; color: white; font-size: 20px; cursor: pointer;">👆</button>
+    </div>
+
+    <!-- Virtual Keyboard -->
+    <div class="keyboard" id="keyboard">
+        <div class="keyboard-row">
+            <button class="key">1</button>
+            <button class="key">2</button>
+            <button class="key">3</button>
+            <button class="key">4</button>
+            <button class="key">5</button>
+            <button class="key">6</button>
+            <button class="key">7</button>
+            <button class="key">8</button>
+            <button class="key">9</button>
+            <button class="key">0</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key">Q</button>
+            <button class="key">W</button>
+            <button class="key">E</button>
+            <button class="key">R</button>
+            <button class="key">T</button>
+            <button class="key">Y</button>
+            <button class="key">U</button>
+            <button class="key">I</button>
+            <button class="key">O</button>
+            <button class="key">P</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key">A</button>
+            <button class="key">S</button>
+            <button class="key">D</button>
+            <button class="key">F</button>
+            <button class="key">G</button>
+            <button class="key">H</button>
+            <button class="key">J</button>
+            <button class="key">K</button>
+            <button class="key">L</button>
+            <button class="key wide">⌫</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key modifier" data-mod="shift">⇧</button>
+            <button class="key">Z</button>
+            <button class="key">X</button>
+            <button class="key">C</button>
+            <button class="key">V</button>
+            <button class="key">B</button>
+            <button class="key">N</button>
+            <button class="key">M</button>
+            <button class="key modifier" data-mod="ctrl">Ctrl</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key modifier" data-mod="alt">Alt</button>
+            <button class="key" style="flex: 4;" data-key="space">Space</button>
+            <button class="key modifier" data-mod="win">⊞</button>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+        <div class="nav-item active" data-panel="screenPanel">
+            <span class="nav-icon">🖥️</span>
+            <span>Screen</span>
+        </div>
+        <div class="nav-item" data-panel="statusPanel">
+            <span class="nav-icon">📊</span>
+            <span>Status</span>
+        </div>
+        <div class="nav-item" data-panel="chatPanel">
+            <span class="nav-icon">💬</span>
+            <span>Chat</span>
+        </div>
+        <div class="nav-item" id="connectBtn">
+            <span class="nav-icon">🔌</span>
+            <span>Connect</span>
+        </div>
+    </nav>
+
+    <!-- Connect Modal -->
+    <div class="modal" id="connectModal">
+        <div class="modal-content">
+            <h2>🔗 Connect</h2>
+            <div class="input-group">
+                <label>Server URL</label>
+                <input type="text" id="serverUrl" value="ws://localhost:8080/ws/relay" placeholder="ws://...">
+            </div>
+            <div class="input-group">
+                <label>Session ID</label>
+                <input type="text" id="sessionId" value="test-session" placeholder="Enter session ID">
+            </div>
+            <button class="btn-primary" id="connectSubmit">Connect</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================================
+        // State
+        // ============================================================================
+        const state = {
+            ws: null,
+            connected: false,
+            modifiers: { ctrl: false, alt: false, shift: false, win: false },
+            lastPing: 0,
+            frameCount: 0
+        };
+
+        // ============================================================================
+        // DOM Elements
+        // ============================================================================
+        const $ = id => document.getElementById(id);
+        const canvas = $('remoteScreen');
+        const ctx = canvas.getContext('2d');
+        const overlay = $('screenOverlay');
+
+        // ============================================================================
+        // Logging
+        // ============================================================================
+        function addLog(msg) {
+            const log = $('logContainer');
+            const time = new Date().toLocaleTimeString();
+            log.innerHTML += `<div>[${time}] ${msg}</div>`;
+            log.scrollTop = log.scrollHeight;
+            console.log(`[LOG] ${msg}`);
+        }
+
+        // ============================================================================
+        // WebSocket Connection
+        // ============================================================================
+        let reconnectTimeout = null;
+
+        function connect() {
+            // Prevent multiple simultaneous connections
+            if (state.ws && (state.ws.readyState === WebSocket.CONNECTING || state.ws.readyState === WebSocket.OPEN)) {
+                addLog('Already connecting/connected, skipping...');
+                return;
+            }
+
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+
+            const url = $('serverUrl').value;
+            const sessionId = $('sessionId').value;
+
+            addLog(`Connecting to ${url}...`);
+
+            try {
+                state.ws = new WebSocket(url);
+            } catch (e) {
+                addLog(`WebSocket creation failed: ${e.message}`);
+                return;
+            }
+
+            state.ws.onopen = () => {
+                addLog('WebSocket connected, authenticating...');
+                // Double-check readyState before sending
+                if (state.ws.readyState === WebSocket.OPEN) {
+                    state.ws.send(JSON.stringify({
+                        type: 'auth',
+                        sessionId: sessionId,
+                        clientType: 'mobile'
+                    }));
+                } else {
+                    addLog('WebSocket not ready for send');
+                }
+            };
+
+            state.ws.onmessage = (event) => {
+                // Handle binary frames (바이너리 프레임 수신)
+                if (event.data instanceof Blob) {
+                    handleBinaryFrame(event.data);
+                    return;
+                }
+
+                try {
+                    const data = JSON.parse(event.data);
+                    handleMessage(data);
+                } catch (e) {
+                    console.error('Parse error:', e);
+                }
+            };
+
+            state.ws.onclose = () => {
+                addLog('Connection closed');
+                setConnectionStatus(false);
+                // Only reconnect if we were previously connected
+                if (state.connected) {
+                    reconnectTimeout = setTimeout(() => connect(), 3000);
+                }
+            };
+
+            state.ws.onerror = (e) => {
+                addLog(`Connection error`);
+            };
+        }
+
+        // ============================================================================
+        // Binary Frame Handler (차분 압축 + 일반 바이너리)
+        // ============================================================================
+
+        // 차분 프레임 디코더 상태
+        const diffDecoder = {
+            canvas: null,  // 복원된 캔버스 이미지 데이터
+            initialized: false
+        };
+
+        async function handleBinaryFrame(blob) {
+            try {
+                const arrayBuffer = await blob.arrayBuffer();
+                const dataView = new DataView(arrayBuffer);
+
+                // 첫 바이트로 프레임 타입 구분
+                const frameType = dataView.getUint8(0);
+
+                if (frameType === 0x01) {
+                    // 차분 프레임 (Differential Frame)
+                    await handleDiffFrame(arrayBuffer.slice(1));
+                } else if (frameType === 0x00) {
+                    // 일반 바이너리 프레임
+                    await handleLegacyBinaryFrame(arrayBuffer.slice(1));
+                } else {
+                    // 이전 버전 호환 (프리픽스 없음)
+                    await handleLegacyBinaryFrame(arrayBuffer);
+                }
+            } catch (e) {
+                console.error('Binary frame error:', e);
+            }
+        }
+
+        async function handleDiffFrame(buffer) {
+            /**
+             * 차분 프레임 구조:
+             * - Header (19 bytes): frameId(4) + timestamp(8) + isKeyframe(1) + width(2) + height(2) + blockCount(2)
+             * - Blocks[]: x(2) + y(2) + w(2) + h(2) + dataLen(4) + data
+             */
+            const dataView = new DataView(buffer);
+            let offset = 0;
+
+            // Parse header
+            const frameId = dataView.getUint32(offset, false); offset += 4;
+            const timestamp = Number(dataView.getBigUint64(offset, false)); offset += 8;
+            const isKeyframe = dataView.getUint8(offset) === 1; offset += 1;
+            const width = dataView.getUint16(offset, false); offset += 2;
+            const height = dataView.getUint16(offset, false); offset += 2;
+            const blockCount = dataView.getUint16(offset, false); offset += 2;
+
+            // 캔버스 초기화
+            if (!diffDecoder.initialized || canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+                diffDecoder.initialized = true;
+            }
+
+            // 블록 처리
+            for (let i = 0; i < blockCount; i++) {
+                const bx = dataView.getUint16(offset, false); offset += 2;
+                const by = dataView.getUint16(offset, false); offset += 2;
+                const bw = dataView.getUint16(offset, false); offset += 2;
+                const bh = dataView.getUint16(offset, false); offset += 2;
+                const dataLen = dataView.getUint32(offset, false); offset += 4;
+
+                const blockData = buffer.slice(offset, offset + dataLen);
+                offset += dataLen;
+
+                // WebP/JPEG 블록 디코딩 및 캔버스에 그리기
+                const blockBlob = new Blob([blockData], { type: 'image/webp' });
+                try {
+                    const bitmap = await createImageBitmap(blockBlob);
+                    ctx.drawImage(bitmap, bx, by, bw, bh);
+                    bitmap.close();
+                } catch (e) {
+                    // WebP 실패 시 JPEG로 재시도
+                    const jpegBlob = new Blob([blockData], { type: 'image/jpeg' });
+                    const bitmap = await createImageBitmap(jpegBlob);
+                    ctx.drawImage(bitmap, bx, by, bw, bh);
+                    bitmap.close();
+                }
+            }
+
+            state.frameCount++;
+
+            // Latency 계산 및 표시
+            const latency = Date.now() - timestamp;
+            $('latency').textContent = `${latency}ms`;
+
+            // Latency 피드백
+            if (state.frameCount % 30 === 0 && state.ws?.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({
+                    type: 'latency_report',
+                    latency: latency,
+                    frameId: frameId,
+                    diffMode: true
+                }));
+            }
+
+            // 로그 (100프레임마다)
+            if (state.frameCount % 100 === 0) {
+                const savedPercent = isKeyframe ? 0 : Math.round((1 - blockCount * 256 / (width * height)) * 100);
+                addLog(`📸 Diff frames: ${state.frameCount} (${savedPercent}% saved)`);
+            }
+        }
+
+        async function handleLegacyBinaryFrame(buffer) {
+            const dataView = new DataView(buffer);
+
+            // Parse header (12 bytes): frameId (4) + timestamp (8)
+            const frameId = dataView.getUint32(0, false);
+            const timestamp = Number(dataView.getBigUint64(4, false));
+
+            // Extract JPEG data
+            const jpegData = buffer.slice(12);
+            const imageBlob = new Blob([jpegData], { type: 'image/jpeg' });
+            const imageUrl = URL.createObjectURL(imageBlob);
+
+            // Render using createImageBitmap for better performance
+            const bitmap = await createImageBitmap(imageBlob);
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            ctx.drawImage(bitmap, 0, 0);
+            bitmap.close();
+
+            URL.revokeObjectURL(imageUrl);
+            state.frameCount++;
+
+            // Calculate and report latency
+            const latency = Date.now() - timestamp;
+            $('latency').textContent = `${latency}ms`;
+
+            // Send latency feedback for adaptive quality (every 30 frames)
+            if (state.frameCount % 30 === 0 && state.ws?.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({
+                    type: 'latency_report',
+                    latency: latency,
+                    frameId: frameId
+                }));
+            }
+
+            // Log every 100 frames
+            if (state.frameCount % 100 === 0) {
+                addLog(`📸 Received ${state.frameCount} binary frames`);
+            }
+        }
+
+        function handleMessage(data) {
+            switch (data.type) {
+                case 'auth_success':
+                    addLog(`Authenticated: ${data.sessionId}`);
+                    setConnectionStatus(true);
+                    $('connectModal').classList.remove('visible');
+                    break;
+
+                case 'frame':
+                    renderFrame(data);
+                    break;
+
+                case 'status':
+                    updateStatus(data);
+                    break;
+
+                case 'peer_connected':
+                    addLog(`PC Agent connected!`);
+                    break;
+
+                case 'peer_disconnected':
+                    addLog(`PC Agent disconnected`);
+                    break;
+
+                case 'monitors':
+                    // 모니터 목록 수신
+                    handleMonitorList(data.list, data.current);
+                    break;
+
+                case 'monitor_switched':
+                    addLog(`Monitor switched: ${data.monitorId}`);
+                    break;
+
+                case 'commandResult':
+                    addLog(`Command result: ${JSON.stringify(data)}`);
+                    addChatMessage('bot', data.result || data.error || 'Command executed');
+                    break;
+
+                // File transfer responses
+                case 'file_start_ack':
+                case 'file_progress':
+                case 'file_complete_ack':
+                case 'file_cancel_ack':
+                    if (typeof handleFileTransferMessage === 'function') {
+                        handleFileTransferMessage(data);
+                    }
+                    break;
+            }
+        }
+
+        function handleMonitorList(monitors, currentId) {
+            // Store for UI display
+            state.monitors = monitors;
+            state.currentMonitor = currentId;
+            addLog(`Available monitors: ${monitors.length}`);
+        }
+
+        // ============================================================================
+        // Frame Rendering (Platinum Canvas Strategy)
+        // ============================================================================
+        const tempImg = new Image();
+
+        tempImg.onload = () => {
+            canvas.width = tempImg.naturalWidth || 1920;
+            canvas.height = tempImg.naturalHeight || 1080;
+            ctx.drawImage(tempImg, 0, 0);
+        };
+
+        function renderFrame(data) {
+            state.frameCount++;
+            tempImg.src = `data:image/jpeg;base64,${data.data}`;
+
+            // Update latency estimate
+            if (data.timestamp) {
+                const latency = Date.now() - data.timestamp;
+                $('latency').textContent = `${latency}ms`;
+
+                // Send latency feedback for adaptive quality (every 30 frames)
+                if (state.frameCount % 30 === 0 && state.ws?.readyState === WebSocket.OPEN) {
+                    state.ws.send(JSON.stringify({
+                        type: 'latency_report',
+                        latency: latency
+                    }));
+                }
+            }
+
+            // Log every 100 frames
+            if (state.frameCount % 100 === 0) {
+                addLog(`📸 Received ${state.frameCount} frames`);
+            }
+        }
+
+        // ============================================================================
+        // Status Update
+        // ============================================================================
+        function updateStatus(data) {
+            if (data.system) {
+                $('cpuUsage').textContent = `${data.system.cpu?.usage?.toFixed(1) || '--'}%`;
+                $('memUsage').textContent = `${(data.system.memory?.used / 1024).toFixed(1) || '--'}GB`;
+                $('battery').textContent = `${data.system.battery?.percent || '--'}%`;
+            }
+            if (data.antigravity) {
+                $('agStatus').textContent = data.antigravity.status || 'Unknown';
+            }
+        }
+
+        function setConnectionStatus(connected) {
+            state.connected = connected;
+            $('statusDot').classList.toggle('connected', connected);
+            $('statusText').textContent = connected ? 'Connected' : 'Disconnected';
+        }
+
+        // ============================================================================
+        // Input Handling
+        // ============================================================================
+        function sendInput(event) {
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify(event));
+            }
+        }
+
+        // Touch → Click
+        overlay.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width;
+            const y = (e.clientY - rect.top) / rect.height;
+
+            sendInput({
+                type: 'click',
+                x: Math.max(0, Math.min(1, x)),
+                y: Math.max(0, Math.min(1, y)),
+                button: 'left'
+            });
+
+            // Visual feedback
+            showClickFeedback(e.clientX, e.clientY);
+        });
+
+        // Long press → Right click
+        let pressTimer = null;
+        overlay.addEventListener('touchstart', (e) => {
+            pressTimer = setTimeout(() => {
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                const x = (touch.clientX - rect.left) / rect.width;
+                const y = (touch.clientY - rect.top) / rect.height;
+
+                sendInput({
+                    type: 'click',
+                    x: x,
+                    y: y,
+                    button: 'right'
+                });
+
+                navigator.vibrate?.(50);
+            }, 500);
+        });
+
+        overlay.addEventListener('touchend', () => clearTimeout(pressTimer));
+        overlay.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+        // Mouse move tracking
+        overlay.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width;
+            const y = (e.clientY - rect.top) / rect.height;
+
+            sendInput({ type: 'move', x, y });
+        });
+
+        // Scroll
+        overlay.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            sendInput({
+                type: 'scroll',
+                deltaX: e.deltaX,
+                deltaY: e.deltaY
+            });
+        }, { passive: false });
+
+        function showClickFeedback(x, y) {
+            const dot = document.createElement('div');
+            dot.style.cssText = `
+            position: fixed;
+            left: ${x - 10}px;
+            top: ${y - 10}px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(99, 102, 241, 0.5);
+            pointer-events: none;
+            animation: clickFade 0.3s ease-out forwards;
+        `;
+            document.body.appendChild(dot);
+            setTimeout(() => dot.remove(), 300);
+        }
+
+        // ============================================================================
+        // Keyboard
+        // ============================================================================
+        const keyboard = $('keyboard');
+
+        $('btnKeyboard').addEventListener('click', () => {
+            keyboard.classList.toggle('visible');
+            $('btnKeyboard').classList.toggle('active');
+        });
+
+        document.querySelectorAll('.key').forEach(key => {
+            key.addEventListener('click', () => {
+                const mod = key.dataset.mod;
+
+                if (mod) {
+                    // Toggle modifier
+                    state.modifiers[mod] = !state.modifiers[mod];
+                    key.classList.toggle('active', state.modifiers[mod]);
+                } else {
+                    // Send key
+                    let keyValue = key.dataset.key || key.textContent;
+                    if (keyValue === '⌫') keyValue = 'backspace';
+                    if (keyValue === 'Space') keyValue = 'space';
+
+                    sendInput({
+                        type: 'key',
+                        key: keyValue.toLowerCase(),
+                        modifiers: { ...state.modifiers }
+                    });
+
+                    navigator.vibrate?.(10);
+                }
+            });
+        });
+
+        // Quick buttons
+        $('btnRightClick').addEventListener('click', () => {
+            sendInput({ type: 'click', x: 0.5, y: 0.5, button: 'right' });
+        });
+
+        $('btnEsc').addEventListener('click', () => {
+            sendInput({ type: 'key', key: 'escape', modifiers: {} });
+        });
+
+        $('btnTab').addEventListener('click', () => {
+            sendInput({ type: 'key', key: 'tab', modifiers: {} });
+        });
+
+        $('btnEnter').addEventListener('click', () => {
+            sendInput({ type: 'key', key: 'enter', modifiers: {} });
+        });
+
+        // ============================================================================
+        // Chat
+        // ============================================================================
+        function addChatMessage(type, text) {
+            const messages = $('chatMessages');
+            const msg = document.createElement('div');
+            msg.style.cssText = `
+            padding: 12px 16px;
+            margin: 8px 0;
+            border-radius: 16px;
+            max-width: 80%;
+            ${type === 'user'
+                    ? 'background: var(--accent); margin-left: auto;'
+                    : 'background: var(--bg-secondary);'}
+        `;
+            msg.textContent = text;
+            messages.appendChild(msg);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        $('chatSend').addEventListener('click', () => {
+            const input = $('chatInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            addChatMessage('user', text);
+            sendInput({
+                type: 'command',
+                text: text,
+                requestId: Date.now()
+            });
+            input.value = '';
+        });
+
+        $('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') $('chatSend').click();
+        });
+
+        // ============================================================================
+        // Navigation
+        // ============================================================================
+        document.querySelectorAll('.nav-item[data-panel]').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+
+                item.classList.add('active');
+                $(item.dataset.panel).classList.add('active');
+
+                // Show/hide quick bar based on panel
+                $('quickBar').style.display = item.dataset.panel === 'screenPanel' ? 'flex' : 'none';
+            });
+        });
+
+        $('connectBtn').addEventListener('click', () => {
+            $('connectModal').classList.add('visible');
+        });
+
+        $('connectSubmit').addEventListener('click', () => {
+            connect();
+        });
+
+        // ============================================================================
+        // Init
+        // ============================================================================
+        // Load saved settings
+        const savedUrl = localStorage.getItem('serverUrl');
+        const savedSession = localStorage.getItem('sessionId');
+        if (savedUrl) $('serverUrl').value = savedUrl;
+        if (savedSession) $('sessionId').value = savedSession;
+
+        // Save settings on connect
+        $('connectSubmit').addEventListener('click', () => {
+            localStorage.setItem('serverUrl', $('serverUrl').value);
+            localStorage.setItem('sessionId', $('sessionId').value);
+        });
+
+        // Add click animation keyframes
+        const style = document.createElement('style');
+        style.textContent = `
+        @keyframes clickFade {
+            from { transform: scale(1); opacity: 1; }
+            to { transform: scale(2); opacity: 0; }
+        }
+    `;
+        document.head.appendChild(style);
+
+        addLog('Remote Control initialized');
+
+        // ============================================================================
+        // File Transfer
+        // ============================================================================
+        const CHUNK_SIZE = 64 * 1024; // 64KB chunks
+        const pendingUploads = new Map();
+
+        const fileDropZone = $('fileDropZone');
+        const fileInput = $('fileInput');
+        const fileTransferList = $('fileTransferList');
+
+        // Click to select
+        fileDropZone.addEventListener('click', () => fileInput.click());
+
+        // Drag & Drop events
+        fileDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileDropZone.classList.add('dragover');
+        });
+
+        fileDropZone.addEventListener('dragleave', () => {
+            fileDropZone.classList.remove('dragover');
+        });
+
+        fileDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileDropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+            fileInput.value = '';
+        });
+
+        function handleFiles(files) {
+            for (const file of files) {
+                uploadFile(file);
+            }
+        }
+
+        async function uploadFile(file) {
+            const fileId = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+            // Create UI element
+            const itemEl = document.createElement('div');
+            itemEl.className = 'file-transfer-item';
+            itemEl.id = `transfer_${fileId}`;
+            itemEl.innerHTML = `
+                <span class="file-icon">📄</span>
+                <div class="file-info">
+                    <div class="file-name">${file.name}</div>
+                    <div class="file-size">${formatFileSize(file.size)} - 0%</div>
+                    <div class="progress-bar"><div class="fill" style="width: 0%"></div></div>
+                </div>
+                <button class="cancel-btn" data-file-id="${fileId}">✕</button>
+            `;
+            fileTransferList.appendChild(itemEl);
+
+            // Store upload info
+            pendingUploads.set(fileId, { file, cancelled: false });
+
+            // Cancel button
+            itemEl.querySelector('.cancel-btn').addEventListener('click', () => {
+                cancelUpload(fileId);
+            });
+
+            // Send file start message
+            sendInput({
+                type: 'file_start',
+                fileId: fileId,
+                fileName: file.name,
+                fileSize: file.size,
+                totalChunks: totalChunks
+            });
+
+            // Send chunks
+            for (let i = 0; i < totalChunks; i++) {
+                const upload = pendingUploads.get(fileId);
+                if (!upload || upload.cancelled) break;
+
+                const start = i * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, file.size);
+                const chunk = file.slice(start, end);
+
+                const buffer = await chunk.arrayBuffer();
+                const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+
+                sendInput({
+                    type: 'file_chunk',
+                    fileId: fileId,
+                    chunkIndex: i,
+                    data: base64
+                });
+
+                // Update progress
+                const progress = ((i + 1) / totalChunks * 100).toFixed(1);
+                updateTransferProgress(fileId, progress);
+
+                // Small delay to avoid overwhelming
+                await new Promise(r => setTimeout(r, 10));
+            }
+
+            // Send complete (if not cancelled)
+            const upload = pendingUploads.get(fileId);
+            if (upload && !upload.cancelled) {
+                sendInput({ type: 'file_complete', fileId: fileId });
+            }
+        }
+
+        function updateTransferProgress(fileId, progress) {
+            const item = $(`transfer_${fileId}`);
+            if (item) {
+                item.querySelector('.file-size').textContent =
+                    item.querySelector('.file-size').textContent.replace(/\d+(\.\d+)?%/, `${progress}%`);
+                item.querySelector('.progress-bar .fill').style.width = `${progress}%`;
+            }
+        }
+
+        function cancelUpload(fileId) {
+            const upload = pendingUploads.get(fileId);
+            if (upload) {
+                upload.cancelled = true;
+                sendInput({ type: 'file_cancel', fileId: fileId });
+            }
+            const item = $(`transfer_${fileId}`);
+            if (item) item.remove();
+            pendingUploads.delete(fileId);
+            addLog(`Upload cancelled: ${fileId}`);
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // Handle file transfer responses
+        function handleFileTransferMessage(data) {
+            switch (data.type) {
+                case 'file_start_ack':
+                    if (data.success) {
+                        addLog(`Transfer started: ${data.fileId}`);
+                    } else {
+                        addLog(`Transfer failed: ${data.error}`);
+                    }
+                    break;
+                case 'file_progress':
+                    // Server progress confirmation (optional)
+                    break;
+                case 'file_complete_ack':
+                    if (data.success) {
+                        addLog(`✅ File saved: ${data.path}`);
+                        const item = $(`transfer_${data.fileId}`);
+                        if (item) {
+                            item.querySelector('.file-size').textContent = 'Complete!';
+                            setTimeout(() => item.remove(), 3000);
+                        }
+                    } else {
+                        addLog(`❌ Save failed: ${data.error}`);
+                    }
+                    pendingUploads.delete(data.fileId);
+                    break;
+            }
+        }
+
+        // ============================================================================
+        // Device Selection (멀티 네트워크 디바이스)
+        // ============================================================================
+        let selectedDevice = null;
+
+        function loadDevices() {
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                sendInput({ type: 'get_devices' });
+            }
+        }
+
+        function renderDevices(devices) {
+            const container = $('deviceContainer');
+            if (!devices || devices.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                        No devices online
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = devices.map(device => `
+                <div class="device-card ${device.id === selectedDevice ? 'selected' : ''}" 
+                     data-device-id="${device.id}" onclick="selectDevice('${device.id}')">
+                    <div class="device-icon">💻</div>
+                    <div class="device-info">
+                        <div class="device-name">${device.name}</div>
+                        <div class="device-meta">${device.ip} · ${device.os}</div>
+                    </div>
+                    <div class="device-status ${device.status === 'online' ? '' : 'offline'}"></div>
+                </div>
+            `).join('');
+        }
+
+        window.selectDevice = function (deviceId) {
+            selectedDevice = deviceId;
+            sendInput({ type: 'connect_device', deviceId });
+            addLog(`Connecting to device: ${deviceId}`);
+            loadDevices(); // Refresh to show selection
+        };
+
+        // Load devices periodically
+        setInterval(loadDevices, 10000);
+
+        // ============================================================================
+        // OCR Button Detection (이미지 버튼 클릭)
+        // ============================================================================
+        const ocrFab = $('ocrFab');
+        const screenOverlay = $('screenOverlay');
+        let detectedButtons = [];
+
+        ocrFab.addEventListener('click', () => {
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                ocrFab.classList.add('loading');
+                sendInput({ type: 'detect_buttons' });
+                addLog('🔍 Detecting clickable buttons...');
+            }
+        });
+
+        function renderButtonOverlays(buttons) {
+            ocrFab.classList.remove('loading');
+            screenOverlay.innerHTML = '';
+            detectedButtons = buttons;
+
+            if (!buttons || buttons.length === 0) {
+                addLog('No clickable buttons detected');
+                return;
+            }
+
+            addLog(`Found ${buttons.length} clickable elements`);
+
+            // canvas 표시 영역과 실제 이미지 크기 비율 계산
+            const canvasRect = canvas.getBoundingClientRect();
+            const displayWidth = canvasRect.width;
+            const displayHeight = canvasRect.height;
+
+            // canvas의 실제 이미지 크기 (내부 해상도)
+            const imageWidth = canvas.width || 1920;
+            const imageHeight = canvas.height || 1080;
+
+            // object-fit: contain 고려하여 실제 표시 영역 계산
+            const imageAspect = imageWidth / imageHeight;
+            const containerAspect = displayWidth / displayHeight;
+
+            let scaleX, scaleY, offsetX = 0, offsetY = 0;
+
+            if (containerAspect > imageAspect) {
+                // 컨테이너가 더 넓음 - 세로 기준
+                scaleY = displayHeight / imageHeight;
+                scaleX = scaleY;
+                offsetX = (displayWidth - imageWidth * scaleX) / 2;
+            } else {
+                // 컨테이너가 더 좁음 - 가로 기준
+                scaleX = displayWidth / imageWidth;
+                scaleY = scaleX;
+                offsetY = (displayHeight - imageHeight * scaleY) / 2;
+            }
+
+            buttons.forEach((btn, index) => {
+                const overlay = document.createElement('div');
+                overlay.className = 'ocr-button-overlay';
+                overlay.style.left = `${btn.bbox[0] * scaleX + offsetX}px`;
+                overlay.style.top = `${btn.bbox[1] * scaleY + offsetY}px`;
+                overlay.style.width = `${btn.width * scaleX}px`;
+                overlay.style.height = `${btn.height * scaleY}px`;
+                overlay.textContent = btn.text.length > 15 ? btn.text.slice(0, 15) + '...' : btn.text;
+                overlay.dataset.text = btn.text;
+                overlay.dataset.x = btn.x;
+                overlay.dataset.y = btn.y;
+
+                overlay.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    clickButtonByText(btn.text);
+                });
+
+                screenOverlay.appendChild(overlay);
+            });
+
+            // Auto-hide overlays after 10 seconds
+            setTimeout(() => {
+                screenOverlay.innerHTML = '';
+            }, 10000);
+        }
+
+        function clickButtonByText(text) {
+            sendInput({ type: 'click_by_text', text });
+            addLog(`🖱️ Clicking: "${text}"`);
+            screenOverlay.innerHTML = ''; // Clear overlays
+        }
+
+        // Handle OCR-related messages
+        function extendedMessageHandler(data) {
+            switch (data.type) {
+                case 'devices':
+                    renderDevices(data.devices);
+                    break;
+                case 'device_connected':
+                    addLog(`✅ Connected to: ${data.name}`);
+                    selectedDevice = data.deviceId;
+                    loadDevices();
+                    break;
+                case 'detected_buttons':
+                    renderButtonOverlays(data.buttons);
+                    break;
+                case 'click_result':
+                    if (data.success) {
+                        addLog(`✅ Clicked "${data.text}" at (${data.x}, ${data.y})`);
+                    } else {
+                        addLog(`❌ Click failed: ${data.error}`);
+                    }
+                    break;
+
+                // WebRTC Signaling
+                case 'webrtc_signal':
+                    handleWebRTCSignal(data);
+                    break;
+            }
+        }
+
+        // Extend handleMessage to include new handlers
+        const originalHandleMessage = handleMessage;
+        handleMessage = function (data) {
+            originalHandleMessage(data);
+            extendedMessageHandler(data);
+        };
+
+        // Load devices on connection
+        const originalSetConnectionStatus = setConnectionStatus;
+        setConnectionStatus = function (connected) {
+            originalSetConnectionStatus(connected);
+            if (connected) {
+                setTimeout(loadDevices, 1000);
+                // WebRTC 가능하면 P2P 연결 시도
+                setTimeout(initiateWebRTC, 2000);
+            }
+        };
+
+        // ============================================================================
+        // WebRTC P2P Connection (지연시간 70% 감소)
+        // ============================================================================
+        let webrtcPeer = null;
+        let webrtcDataChannel = null;
+        let webrtcVideoElement = null;
+        let webrtcEnabled = false;
+
+        const WEBRTC_CONFIG = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        function initiateWebRTC() {
+            if (!window.RTCPeerConnection) {
+                addLog('⚠️ WebRTC not supported');
+                return;
+            }
+
+            addLog('🔄 Initiating WebRTC P2P connection...');
+
+            // Request WebRTC offer from agent
+            sendInput({ type: 'request_webrtc' });
+        }
+
+        async function handleWebRTCSignal(data) {
+            try {
+                if (data.signalType === 'offer') {
+                    // Offer 수신 → Answer 생성
+                    await handleWebRTCOffer(data);
+                } else if (data.signalType === 'answer') {
+                    // Answer 수신
+                    await handleWebRTCAnswer(data);
+                } else if (data.signalType === 'ice_candidate') {
+                    // ICE Candidate 수신
+                    await handleICECandidate(data);
+                }
+            } catch (e) {
+                console.error('WebRTC signal error:', e);
+            }
+        }
+
+        async function handleWebRTCOffer(offer) {
+            addLog('📥 WebRTC offer received');
+
+            // Create peer connection
+            webrtcPeer = new RTCPeerConnection(WEBRTC_CONFIG);
+
+            // ICE candidate 핸들러
+            webrtcPeer.onicecandidate = (event) => {
+                if (event.candidate) {
+                    sendInput({
+                        type: 'webrtc_signal',
+                        signalType: 'ice_candidate',
+                        candidate: event.candidate.candidate,
+                        sdpMid: event.candidate.sdpMid,
+                        sdpMLineIndex: event.candidate.sdpMLineIndex
+                    });
+                }
+            };
+
+            // 연결 상태 변경
+            webrtcPeer.onconnectionstatechange = () => {
+                const state = webrtcPeer.connectionState;
+                addLog(`🔗 WebRTC: ${state}`);
+
+                if (state === 'connected') {
+                    webrtcEnabled = true;
+                    addLog('✅ WebRTC P2P connected! (70% faster)');
+                } else if (state === 'disconnected' || state === 'failed') {
+                    webrtcEnabled = false;
+                    addLog('⚠️ WebRTC disconnected, using relay');
+                }
+            };
+
+            // 비디오 트랙 수신
+            webrtcPeer.ontrack = (event) => {
+                addLog('📹 WebRTC video track received');
+
+                if (!webrtcVideoElement) {
+                    webrtcVideoElement = document.createElement('video');
+                    webrtcVideoElement.autoplay = true;
+                    webrtcVideoElement.playsInline = true;
+                    webrtcVideoElement.muted = true;
+                    webrtcVideoElement.style.display = 'none';
+                }
+
+                webrtcVideoElement.srcObject = event.streams[0];
+
+                // 비디오 프레임을 캔버스에 렌더링
+                webrtcVideoElement.onloadedmetadata = () => {
+                    renderWebRTCVideo();
+                };
+            };
+
+            // 데이터 채널 수신
+            webrtcPeer.ondatachannel = (event) => {
+                webrtcDataChannel = event.channel;
+                webrtcDataChannel.onmessage = (e) => {
+                    console.log('WebRTC data:', e.data);
+                };
+                addLog('📡 WebRTC data channel ready');
+            };
+
+            // Remote description 설정
+            await webrtcPeer.setRemoteDescription(
+                new RTCSessionDescription({ type: offer.type || 'offer', sdp: offer.sdp })
+            );
+
+            // Answer 생성
+            const answer = await webrtcPeer.createAnswer();
+            await webrtcPeer.setLocalDescription(answer);
+
+            // Answer 전송
+            sendInput({
+                type: 'webrtc_signal',
+                signalType: 'answer',
+                sdp: answer.sdp
+            });
+
+            addLog('📤 WebRTC answer sent');
+        }
+
+        async function handleWebRTCAnswer(answer) {
+            if (webrtcPeer) {
+                await webrtcPeer.setRemoteDescription(
+                    new RTCSessionDescription({ type: 'answer', sdp: answer.sdp })
+                );
+                addLog('📥 WebRTC answer received');
+            }
+        }
+
+        async function handleICECandidate(data) {
+            if (webrtcPeer && data.candidate) {
+                try {
+                    await webrtcPeer.addIceCandidate(new RTCIceCandidate({
+                        candidate: data.candidate,
+                        sdpMid: data.sdpMid,
+                        sdpMLineIndex: data.sdpMLineIndex
+                    }));
+                } catch (e) {
+                    console.error('ICE candidate error:', e);
+                }
+            }
+        }
+
+        function renderWebRTCVideo() {
+            if (!webrtcVideoElement || !webrtcEnabled) return;
+
+            function draw() {
+                if (webrtcEnabled && webrtcVideoElement.readyState >= 2) {
+                    canvas.width = webrtcVideoElement.videoWidth;
+                    canvas.height = webrtcVideoElement.videoHeight;
+                    ctx.drawImage(webrtcVideoElement, 0, 0);
+                    state.frameCount++;
+
+                    if (state.frameCount % 100 === 0) {
+                        addLog(`📹 WebRTC frames: ${state.frameCount}`);
+                    }
+                }
+
+                if (webrtcEnabled) {
+                    requestAnimationFrame(draw);
+                }
+            }
+
+            draw();
+        }
+
+        // WebRTC로 입력 전송 (P2P 직접 전송)
+        function sendInputWebRTC(event) {
+            if (webrtcDataChannel && webrtcDataChannel.readyState === 'open') {
+                webrtcDataChannel.send(JSON.stringify(event));
+                return true;
+            }
+            return false;
+        }
+
+        // sendInput 오버라이드 - WebRTC 우선 사용
+        const originalSendInput = sendInput;
+        sendInput = function (event) {
+            // WebRTC 데이터 채널이 열려있으면 P2P로 전송
+            if (sendInputWebRTC(event)) {
+                return;
+            }
+            // 아니면 WebSocket으로 전송
+            originalSendInput(event);
+        };
+
+        // ============================================================================
+        // ULTRA Features
+        // ============================================================================
+
+        // Voice Control State
+        let voiceRecognition = null;
+        let voiceEnabled = false;
+
+        // Audio Stream State
+        let audioContext = null;
+        let audioEnabled = false;
+
+        // Gesture Mode State
+        let gestureMode = false;
+        let touchStart = null;
+
+        // Clipboard State
+        let clipboardSyncEnabled = false;
+
+        // Initialize ULTRA buttons
+        document.getElementById('btnVoice')?.addEventListener('click', toggleVoiceControl);
+        document.getElementById('btnClipboard')?.addEventListener('click', toggleClipboardSync);
+        document.getElementById('btnMacro')?.addEventListener('click', showMacroPanel);
+        document.getElementById('btnAudio')?.addEventListener('click', toggleAudioStream);
+        document.getElementById('btnGesture')?.addEventListener('click', toggleGestureMode);
+
+        // ===== Voice Control =====
+        function toggleVoiceControl() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                addLog('⚠️ Voice control not supported');
+                return;
+            }
+
+            voiceEnabled = !voiceEnabled;
+            const btn = document.getElementById('btnVoice');
+
+            if (voiceEnabled) {
+                startVoiceRecognition();
+                btn.style.boxShadow = '0 0 20px rgba(139, 92, 246, 0.8)';
+                addLog('🎤 Voice control enabled - Say commands!');
+            } else {
+                stopVoiceRecognition();
+                btn.style.boxShadow = 'none';
+                addLog('🎤 Voice control disabled');
+            }
+        }
+
+        function startVoiceRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            voiceRecognition = new SpeechRecognition();
+            voiceRecognition.continuous = true;
+            voiceRecognition.interimResults = false;
+            voiceRecognition.lang = 'ko-KR'; // Korean + English
+
+            voiceRecognition.onresult = (event) => {
+                const transcript = event.results[event.results.length - 1][0].transcript;
+                const confidence = event.results[event.results.length - 1][0].confidence;
+
+                addLog(`🎤 "${transcript}" (${Math.round(confidence * 100)}%)`);
+
+                // Send to agent for execution
+                sendInput({
+                    type: 'voice_command',
+                    text: transcript,
+                    confidence: confidence
+                });
+            };
+
+            voiceRecognition.onerror = (event) => {
+                if (event.error !== 'no-speech') {
+                    addLog(`🎤 Error: ${event.error}`);
+                }
+            };
+
+            voiceRecognition.onend = () => {
+                if (voiceEnabled) {
+                    voiceRecognition.start(); // Restart
+                }
+            };
+
+            voiceRecognition.start();
+        }
+
+        function stopVoiceRecognition() {
+            if (voiceRecognition) {
+                voiceRecognition.stop();
+                voiceRecognition = null;
+            }
+        }
+
+        // ===== Clipboard Sync =====
+        function toggleClipboardSync() {
+            clipboardSyncEnabled = !clipboardSyncEnabled;
+            const btn = document.getElementById('btnClipboard');
+
+            if (clipboardSyncEnabled) {
+                btn.style.boxShadow = '0 0 20px rgba(16, 185, 129, 0.8)';
+                addLog('📋 Clipboard sync enabled');
+                sendInput({ type: 'clipboard_sync', action: 'start' });
+
+                // Listen for clipboard changes
+                document.addEventListener('paste', onClipboardPaste);
+            } else {
+                btn.style.boxShadow = 'none';
+                addLog('📋 Clipboard sync disabled');
+                sendInput({ type: 'clipboard_sync', action: 'stop' });
+                document.removeEventListener('paste', onClipboardPaste);
+            }
+        }
+
+        function onClipboardPaste(e) {
+            const text = e.clipboardData?.getData('text');
+            if (text && clipboardSyncEnabled) {
+                sendInput({
+                    type: 'clipboard_set',
+                    contentType: 'text',
+                    data: text
+                });
+                addLog(`📋 Sent to PC: "${text.substring(0, 30)}..."`);
+            }
+        }
+
+        // ===== Macro Panel =====
+        function showMacroPanel() {
+            addLog('⚡ Fetching macros...');
+            sendInput({ type: 'get_macros' });
+
+            // Show simple prompt for now
+            const macroName = prompt('Enter macro name to run:\n\nExamples:\n- Morning Routine\n- Quick Screenshot\n- Lock Screen');
+            if (macroName) {
+                sendInput({ type: 'run_macro', name: macroName });
+                addLog(`⚡ Running macro: ${macroName}`);
+            }
+        }
+
+        // ===== Audio Stream =====
+        function toggleAudioStream() {
+            audioEnabled = !audioEnabled;
+            const btn = document.getElementById('btnAudio');
+
+            if (audioEnabled) {
+                btn.style.boxShadow = '0 0 20px rgba(236, 72, 153, 0.8)';
+                addLog('🔊 Audio stream enabled');
+                sendInput({ type: 'audio_stream', action: 'start' });
+                initAudioContext();
+            } else {
+                btn.style.boxShadow = 'none';
+                addLog('🔊 Audio stream disabled');
+                sendInput({ type: 'audio_stream', action: 'stop' });
+            }
+        }
+
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        // ===== Gesture Mode =====
+        function toggleGestureMode() {
+            gestureMode = !gestureMode;
+            const btn = document.getElementById('btnGesture');
+
+            if (gestureMode) {
+                btn.style.boxShadow = '0 0 20px rgba(6, 182, 212, 0.8)';
+                addLog('👆 Gesture mode enabled');
+                addLog('   Swipe ← → ↑ ↓ for shortcuts');
+                enableGestureHandlers();
+            } else {
+                btn.style.boxShadow = 'none';
+                addLog('👆 Gesture mode disabled');
+                disableGestureHandlers();
+            }
+        }
+
+        function enableGestureHandlers() {
+            canvas.addEventListener('touchstart', onGestureTouchStart);
+            canvas.addEventListener('touchend', onGestureTouchEnd);
+        }
+
+        function disableGestureHandlers() {
+            canvas.removeEventListener('touchstart', onGestureTouchStart);
+            canvas.removeEventListener('touchend', onGestureTouchEnd);
+        }
+
+        function onGestureTouchStart(e) {
+            if (!gestureMode) return;
+            const touch = e.touches[0];
+            touchStart = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+        }
+
+        function onGestureTouchEnd(e) {
+            if (!gestureMode || !touchStart) return;
+
+            const touch = e.changedTouches[0];
+            const dx = touch.clientX - touchStart.x;
+            const dy = touch.clientY - touchStart.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const duration = Date.now() - touchStart.time;
+
+            // Swipe detection
+            if (distance > 80 && duration < 500) {
+                let gesture = null;
+
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    gesture = dx > 0 ? 'swipe_right' : 'swipe_left';
+                } else {
+                    gesture = dy > 0 ? 'swipe_down' : 'swipe_up';
+                }
+
+                sendInput({ type: 'gesture', gesture: gesture });
+                addLog(`👆 Gesture: ${gesture}`);
+            }
+
+            touchStart = null;
+        }
+
+        // ===== Handle ULTRA responses =====
+        function handleUltraMessage(data) {
+            switch (data.type) {
+                case 'voice_result':
+                    addLog(`🎤 Executed: ${data.result}`);
+                    break;
+                case 'clipboard':
+                    if (data.contentType === 'text' && clipboardSyncEnabled) {
+                        navigator.clipboard?.writeText(data.data);
+                        addLog(`📋 Received: "${data.data.substring(0, 30)}..."`);
+                    }
+                    break;
+                case 'macro_list':
+                    addLog(`⚡ Available: ${data.macros.map(m => m.name).join(', ')}`);
+                    break;
+                case 'macro_result':
+                    addLog(`⚡ Macro ${data.success ? 'completed' : 'failed'}`);
+                    break;
+                case 'audio_data':
+                    playAudioData(data.data);
+                    break;
+                case 'gesture_result':
+                    addLog(`👆 ${data.action}: ${data.success ? '✓' : '✗'}`);
+                    break;
+            }
+        }
+
+        function playAudioData(base64Data) {
+            if (!audioContext || !audioEnabled) return;
+            // Decode and play audio (simplified)
+            try {
+                const binaryData = atob(base64Data);
+                // Audio playback implementation would go here
+            } catch (e) {
+                console.error('Audio decode error:', e);
+            }
+        }
+
+        // Extend message handler for ULTRA
+        const ultraOriginalHandleMessage = handleMessage;
+        handleMessage = function (data) {
+            ultraOriginalHandleMessage(data);
+            handleUltraMessage(data);
+        };
+    </script>
+</body>
+
+</html>

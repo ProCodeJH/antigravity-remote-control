@@ -1,0 +1,18 @@
+{
+    "name": "antigravity-remote-control-backend",
+    "version": "1.0.0",
+    "description": "Antigravity Remote Control System - Backend & WebSocket Relay",
+    "main": "src/server.js",
+    "type": "module",
+    "scripts": {
+        "start": "node src/server.js",
+        "dev": "node --watch src/server.js"
+    },
+    "dependencies": {
+        "fastify": "^5.0.0",
+        "@fastify/cors": "^10.0.0",
+        "@fastify/websocket": "^11.0.0",
+        "ws": "^8.18.0",
+        "uuid": "^10.0.0"
+    }
+}
