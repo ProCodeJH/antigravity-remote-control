@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>Antigravity Remote Control</title>
+    <!-- PWA manifest disabled - icons not required for local testing -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #14141f;
+            --bg-glass: rgba(20, 20, 35, 0.85);
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.3);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 56px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--danger);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: var(--success);
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        /* Main Content */
+        .main {
+            padding-top: 56px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Screen Viewer */
+        .screen-container {
+            flex: 1;
+            position: relative;
+            background: #000;
+            overflow: hidden;
+        }
+
+        #remoteScreen {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #111;
+        }
+
+        .screen-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: auto;
+        }
+
+        /* Quick Action Bar */
+        .quick-bar {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            border: 1px solid var(--border);
+        }
+
+        .quick-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: none;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-btn:active {
+            transform: scale(0.9);
+            background: var(--accent);
+        }
+
+        .quick-btn.active {
+            background: var(--accent);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        /* Bottom Nav */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-around;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .nav-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 11px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .nav-item.active {
+            color: var(--accent);
+        }
+
+        .nav-icon {
+            font-size: 22px;
+        }
+
+        /* Panels */
+        .panel {
+            display: none;
+            position: fixed;
+            top: 56px;
+            left: 0;
+            right: 0;
+            bottom: 70px;
+            background: var(--bg-primary);
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        /* Virtual Keyboard */
+        .keyboard {
+            display: none;
+            position: fixed;
+            bottom: 70px;
+            left: 0;
+            right: 0;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border);
+            padding: 8px;
+        }
+
+        .keyboard.visible {
+            display: block;
+        }
+
+        .keyboard-row {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+
+        .key {
+            min-width: 32px;
+            height: 42px;
+            border-radius: 6px;
+            border: none;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            flex: 1;
+            max-width: 50px;
+        }
+
+        .key.wide {
+            flex: 2;
+            max-width: 100px;
+        }
+
+        .key:active {
+            background: var(--accent);
+        }
+
+        .key.modifier.active {
+            background: var(--accent);
+        }
+
+        /* Status Cards */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .status-card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .status-card .label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .status-card .value {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        /* Connect Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .modal.visible {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border-radius: 24px;
+            padding: 32px;
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid var(--border);
+        }
+
+        .modal h2 {
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 16px;
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 16px;
+            border-radius: 12px;
+            border: none;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+        }
+
+        /* Chat Panel */
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding-bottom: 80px;
+        }
+
+        .chat-input-container {
+            position: fixed;
+            bottom: 70px;
+            left: 0;
+            right: 0;
+            padding: 12px 16px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 12px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 24px;
+            border: 1px solid var(--border);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 16px;
+        }
+
+        .chat-send {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: none;
+            background: var(--accent);
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        /* Log Viewer */
+        .log-container {
+            background: #111;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: 'Fira Code', monospace;
+            font-size: 11px;
+            max-height: 200px;
+            overflow-y: auto;
+            color: #6ee7b7;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">⚡ Antigravity</div>
+        <div class="status-indicator">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Disconnected</span>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Screen Panel (Default) -->
+        <div class="panel active" id="screenPanel">
+            <div class="screen-container">
+                <canvas id="remoteScreen"></canvas>
+                <div class="screen-overlay" id="screenOverlay"></div>
+            </div>
+        </div>
+
+        <!-- Status Panel -->
+        <div class="panel" id="statusPanel">
+            <h3 style="margin-bottom: 16px;">📊 System Status</h3>
+            <div class="status-grid">
+                <div class="status-card">
+                    <div class="label">CPU Usage</div>
+                    <div class="value" id="cpuUsage">--%</div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Memory</div>
+                    <div class="value" id="memUsage">--GB</div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Battery</div>
+                    <div class="value" id="battery">--%</div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Latency</div>
+                    <div class="value" id="latency">--ms</div>
+                </div>
+            </div>
+
+            <h3 style="margin: 24px 0 16px;">🤖 Antigravity</h3>
+            <div class="status-card" style="grid-column: span 2;">
+                <div class="label">Status</div>
+                <div class="value" id="agStatus" style="font-size: 16px;">--</div>
+            </div>
+
+            <h3 style="margin: 24px 0 16px;">📋 Connection Logs</h3>
+            <div class="log-container" id="logContainer"></div>
+        </div>
+
+        <!-- Chat Panel -->
+        <div class="panel" id="chatPanel">
+            <div class="chat-messages" id="chatMessages">
+                <p style="color: var(--text-secondary); text-align: center; margin-top: 32px;">
+                    Send commands to Antigravity
+                </p>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" class="chat-input" id="chatInput" placeholder="Enter command...">
+                <button class="chat-send" id="chatSend">➤</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Quick Action Bar -->
+    <div class="quick-bar" id="quickBar">
+        <button class="quick-btn" id="btnRightClick" title="Right Click">🖱️</button>
+        <button class="quick-btn" id="btnKeyboard" title="Keyboard">⌨️</button>
+        <button class="quick-btn" id="btnEsc" title="ESC">✕</button>
+        <button class="quick-btn" id="btnTab" title="TAB">⇥</button>
+        <button class="quick-btn" id="btnEnter" title="Enter">↵</button>
+    </div>
+
+    <!-- Virtual Keyboard -->
+    <div class="keyboard" id="keyboard">
+        <div class="keyboard-row">
+            <button class="key">1</button>
+            <button class="key">2</button>
+            <button class="key">3</button>
+            <button class="key">4</button>
+            <button class="key">5</button>
+            <button class="key">6</button>
+            <button class="key">7</button>
+            <button class="key">8</button>
+            <button class="key">9</button>
+            <button class="key">0</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key">Q</button>
+            <button class="key">W</button>
+            <button class="key">E</button>
+            <button class="key">R</button>
+            <button class="key">T</button>
+            <button class="key">Y</button>
+            <button class="key">U</button>
+            <button class="key">I</button>
+            <button class="key">O</button>
+            <button class="key">P</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key">A</button>
+            <button class="key">S</button>
+            <button class="key">D</button>
+            <button class="key">F</button>
+            <button class="key">G</button>
+            <button class="key">H</button>
+            <button class="key">J</button>
+            <button class="key">K</button>
+            <button class="key">L</button>
+            <button class="key wide">⌫</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key modifier" data-mod="shift">⇧</button>
+            <button class="key">Z</button>
+            <button class="key">X</button>
+            <button class="key">C</button>
+            <button class="key">V</button>
+            <button class="key">B</button>
+            <button class="key">N</button>
+            <button class="key">M</button>
+            <button class="key modifier" data-mod="ctrl">Ctrl</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key modifier" data-mod="alt">Alt</button>
+            <button class="key" style="flex: 4;" data-key="space">Space</button>
+            <button class="key modifier" data-mod="win">⊞</button>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+        <div class="nav-item active" data-panel="screenPanel">
+            <span class="nav-icon">🖥️</span>
+            <span>Screen</span>
+        </div>
+        <div class="nav-item" data-panel="statusPanel">
+            <span class="nav-icon">📊</span>
+            <span>Status</span>
+        </div>
+        <div class="nav-item" data-panel="chatPanel">
+            <span class="nav-icon">💬</span>
+            <span>Chat</span>
+        </div>
+        <div class="nav-item" id="connectBtn">
+            <span class="nav-icon">🔌</span>
+            <span>Connect</span>
+        </div>
+    </nav>
+
+    <!-- Connect Modal -->
+    <div class="modal" id="connectModal">
+        <div class="modal-content">
+            <h2>🔗 Connect</h2>
+            <div class="input-group">
+                <label>Server URL</label>
+                <input type="text" id="serverUrl" value="ws://localhost:8080/ws/relay" placeholder="ws://...">
+            </div>
+            <div class="input-group">
+                <label>Session ID</label>
+                <input type="text" id="sessionId" value="test-session" placeholder="Enter session ID">
+            </div>
+            <button class="btn-primary" id="connectSubmit">Connect</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================================
+        // State
+        // ============================================================================
+        const state = {
+            ws: null,
+            connected: false,
+            modifiers: { ctrl: false, alt: false, shift: false, win: false },
+            lastPing: 0,
+            frameCount: 0
+        };
+
+        // ============================================================================
+        // DOM Elements
+        // ============================================================================
+        const $ = id => document.getElementById(id);
+        const canvas = $('remoteScreen');
+        const ctx = canvas.getContext('2d');
+        const overlay = $('screenOverlay');
+
+        // ============================================================================
+        // Logging
+        // ============================================================================
+        function addLog(msg) {
+            const log = $('logContainer');
+            const time = new Date().toLocaleTimeString();
+            log.innerHTML += `<div>[${time}] ${msg}</div>`;
+            log.scrollTop = log.scrollHeight;
+            console.log(`[LOG] ${msg}`);
+        }
+
+        // ============================================================================
+        // WebSocket Connection
+        // ============================================================================
+        let reconnectTimeout = null;
+
+        function connect() {
+            // Prevent multiple simultaneous connections
+            if (state.ws && (state.ws.readyState === WebSocket.CONNECTING || state.ws.readyState === WebSocket.OPEN)) {
+                addLog('Already connecting/connected, skipping...');
+                return;
+            }
+
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+
+            const url = $('serverUrl').value;
+            const sessionId = $('sessionId').value;
+
+            addLog(`Connecting to ${url}...`);
+
+            try {
+                state.ws = new WebSocket(url);
+            } catch (e) {
+                addLog(`WebSocket creation failed: ${e.message}`);
+                return;
+            }
+
+            state.ws.onopen = () => {
+                addLog('WebSocket connected, authenticating...');
+                // Double-check readyState before sending
+                if (state.ws.readyState === WebSocket.OPEN) {
+                    state.ws.send(JSON.stringify({
+                        type: 'auth',
+                        sessionId: sessionId,
+                        clientType: 'mobile'
+                    }));
+                } else {
+                    addLog('WebSocket not ready for send');
+                }
+            };
+
+            state.ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleMessage(data);
+                } catch (e) {
+                    console.error('Parse error:', e);
+                }
+            };
+
+            state.ws.onclose = () => {
+                addLog('Connection closed');
+                setConnectionStatus(false);
+                // Only reconnect if we were previously connected
+                if (state.connected) {
+                    reconnectTimeout = setTimeout(() => connect(), 3000);
+                }
+            };
+
+            state.ws.onerror = (e) => {
+                addLog(`Connection error`);
+            };
+        }
+
+        function handleMessage(data) {
+            switch (data.type) {
+                case 'auth_success':
+                    addLog(`Authenticated: ${data.sessionId}`);
+                    setConnectionStatus(true);
+                    $('connectModal').classList.remove('visible');
+                    break;
+
+                case 'frame':
+                    renderFrame(data);
+                    break;
+
+                case 'status':
+                    updateStatus(data);
+                    break;
+
+                case 'peer_connected':
+                    addLog(`PC Agent connected!`);
+                    break;
+
+                case 'peer_disconnected':
+                    addLog(`PC Agent disconnected`);
+                    break;
+
+                case 'commandResult':
+                    addLog(`Command result: ${JSON.stringify(data)}`);
+                    addChatMessage('bot', data.result || data.error || 'Command executed');
+                    break;
+            }
+        }
+
+        // ============================================================================
+        // Frame Rendering (Platinum Canvas Strategy)
+        // ============================================================================
+        const tempImg = new Image();
+
+        tempImg.onload = () => {
+            canvas.width = tempImg.naturalWidth || 1920;
+            canvas.height = tempImg.naturalHeight || 1080;
+            ctx.drawImage(tempImg, 0, 0);
+        };
+
+        function renderFrame(data) {
+            state.frameCount++;
+            tempImg.src = `data:image/jpeg;base64,${data.data}`;
+
+            // Update latency estimate
+            if (data.timestamp) {
+                const latency = Date.now() - data.timestamp;
+                $('latency').textContent = `${latency}ms`;
+            }
+
+            // Log every 100 frames
+            if (state.frameCount % 100 === 0) {
+                addLog(`📸 Received ${state.frameCount} frames`);
+            }
+        }
+
+        // ============================================================================
+        // Status Update
+        // ============================================================================
+        function updateStatus(data) {
+            if (data.system) {
+                $('cpuUsage').textContent = `${data.system.cpu?.usage?.toFixed(1) || '--'}%`;
+                $('memUsage').textContent = `${(data.system.memory?.used / 1024).toFixed(1) || '--'}GB`;
+                $('battery').textContent = `${data.system.battery?.percent || '--'}%`;
+            }
+            if (data.antigravity) {
+                $('agStatus').textContent = data.antigravity.status || 'Unknown';
+            }
+        }
+
+        function setConnectionStatus(connected) {
+            state.connected = connected;
+            $('statusDot').classList.toggle('connected', connected);
+            $('statusText').textContent = connected ? 'Connected' : 'Disconnected';
+        }
+
+        // ============================================================================
+        // Input Handling
+        // ============================================================================
+        function sendInput(event) {
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify(event));
+            }
+        }
+
+        // Touch → Click
+        overlay.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width;
+            const y = (e.clientY - rect.top) / rect.height;
+
+            sendInput({
+                type: 'click',
+                x: Math.max(0, Math.min(1, x)),
+                y: Math.max(0, Math.min(1, y)),
+                button: 'left'
+            });
+
+            // Visual feedback
+            showClickFeedback(e.clientX, e.clientY);
+        });
+
+        // Long press → Right click
+        let pressTimer = null;
+        overlay.addEventListener('touchstart', (e) => {
+            pressTimer = setTimeout(() => {
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                const x = (touch.clientX - rect.left) / rect.width;
+                const y = (touch.clientY - rect.top) / rect.height;
+
+                sendInput({
+                    type: 'click',
+                    x: x,
+                    y: y,
+                    button: 'right'
+                });
+
+                navigator.vibrate?.(50);
+            }, 500);
+        });
+
+        overlay.addEventListener('touchend', () => clearTimeout(pressTimer));
+        overlay.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+        // Mouse move tracking
+        overlay.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width;
+            const y = (e.clientY - rect.top) / rect.height;
+
+            sendInput({ type: 'move', x, y });
+        });
+
+        // Scroll
+        overlay.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            sendInput({
+                type: 'scroll',
+                deltaX: e.deltaX,
+                deltaY: e.deltaY
+            });
+        }, { passive: false });
+
+        function showClickFeedback(x, y) {
+            const dot = document.createElement('div');
+            dot.style.cssText = `
+            position: fixed;
+            left: ${x - 10}px;
+            top: ${y - 10}px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(99, 102, 241, 0.5);
+            pointer-events: none;
+            animation: clickFade 0.3s ease-out forwards;
+        `;
+            document.body.appendChild(dot);
+            setTimeout(() => dot.remove(), 300);
+        }
+
+        // ============================================================================
+        // Keyboard
+        // ============================================================================
+        const keyboard = $('keyboard');
+
+        $('btnKeyboard').addEventListener('click', () => {
+            keyboard.classList.toggle('visible');
+            $('btnKeyboard').classList.toggle('active');
+        });
+
+        document.querySelectorAll('.key').forEach(key => {
+            key.addEventListener('click', () => {
+                const mod = key.dataset.mod;
+
+                if (mod) {
+                    // Toggle modifier
+                    state.modifiers[mod] = !state.modifiers[mod];
+                    key.classList.toggle('active', state.modifiers[mod]);
+                } else {
+                    // Send key
+                    let keyValue = key.dataset.key || key.textContent;
+                    if (keyValue === '⌫') keyValue = 'backspace';
+                    if (keyValue === 'Space') keyValue = 'space';
+
+                    sendInput({
+                        type: 'key',
+                        key: keyValue.toLowerCase(),
+                        modifiers: { ...state.modifiers }
+                    });
+
+                    navigator.vibrate?.(10);
+                }
+            });
+        });
+
+        // Quick buttons
+        $('btnRightClick').addEventListener('click', () => {
+            sendInput({ type: 'click', x: 0.5, y: 0.5, button: 'right' });
+        });
+
+        $('btnEsc').addEventListener('click', () => {
+            sendInput({ type: 'key', key: 'escape', modifiers: {} });
+        });
+
+        $('btnTab').addEventListener('click', () => {
+            sendInput({ type: 'key', key: 'tab', modifiers: {} });
+        });
+
+        $('btnEnter').addEventListener('click', () => {
+            sendInput({ type: 'key', key: 'enter', modifiers: {} });
+        });
+
+        // ============================================================================
+        // Chat
+        // ============================================================================
+        function addChatMessage(type, text) {
+            const messages = $('chatMessages');
+            const msg = document.createElement('div');
+            msg.style.cssText = `
+            padding: 12px 16px;
+            margin: 8px 0;
+            border-radius: 16px;
+            max-width: 80%;
+            ${type === 'user'
+                    ? 'background: var(--accent); margin-left: auto;'
+                    : 'background: var(--bg-secondary);'}
+        `;
+            msg.textContent = text;
+            messages.appendChild(msg);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        $('chatSend').addEventListener('click', () => {
+            const input = $('chatInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            addChatMessage('user', text);
+            sendInput({
+                type: 'command',
+                text: text,
+                requestId: Date.now()
+            });
+            input.value = '';
+        });
+
+        $('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') $('chatSend').click();
+        });
+
+        // ============================================================================
+        // Navigation
+        // ============================================================================
+        document.querySelectorAll('.nav-item[data-panel]').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+
+                item.classList.add('active');
+                $(item.dataset.panel).classList.add('active');
+
+                // Show/hide quick bar based on panel
+                $('quickBar').style.display = item.dataset.panel === 'screenPanel' ? 'flex' : 'none';
+            });
+        });
+
+        $('connectBtn').addEventListener('click', () => {
+            $('connectModal').classList.add('visible');
+        });
+
+        $('connectSubmit').addEventListener('click', () => {
+            connect();
+        });
+
+        // ============================================================================
+        // Init
+        // ============================================================================
+        // Load saved settings
+        const savedUrl = localStorage.getItem('serverUrl');
+        const savedSession = localStorage.getItem('sessionId');
+        if (savedUrl) $('serverUrl').value = savedUrl;
+        if (savedSession) $('sessionId').value = savedSession;
+
+        // Save settings on connect
+        $('connectSubmit').addEventListener('click', () => {
+            localStorage.setItem('serverUrl', $('serverUrl').value);
+            localStorage.setItem('sessionId', $('sessionId').value);
+        });
+
+        // Add click animation keyframes
+        const style = document.createElement('style');
+        style.textContent = `
+        @keyframes clickFade {
+            from { transform: scale(1); opacity: 1; }
+            to { transform: scale(2); opacity: 0; }
+        }
+    `;
+        document.head.appendChild(style);
+
+        addLog('Remote Control initialized');
+    </script>
+</body>
+
+</html>

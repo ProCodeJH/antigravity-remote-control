@@ -1,0 +1,31 @@
+{
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "version": 2,
+    "builds": [
+        {
+            "src": "backend/src/server.js",
+            "use": "@vercel/node"
+        },
+        {
+            "src": "mobile/**",
+            "use": "@vercel/static"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/api/(.*)",
+            "dest": "/backend/src/server.js"
+        },
+        {
+            "src": "/ws/(.*)",
+            "dest": "/backend/src/server.js"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/mobile/$1"
+        }
+    ],
+    "env": {
+        "TEST_MODE": "true"
+    }
+}
