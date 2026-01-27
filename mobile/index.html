@@ -8,7 +8,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0a0a0f">
     <title>Antigravity Remote Control</title>
-    <!-- PWA manifest disabled - icons not required for local testing -->
     <style>
         * {
             margin: 0;
@@ -31,12 +30,16 @@
             --border: rgba(255, 255, 255, 0.1);
         }
 
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+        }
+
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
-            min-height: 100vh;
-            overflow: hidden;
         }
 
         /* Header */
@@ -61,6 +64,7 @@
             font-weight: 700;
             background: linear-gradient(135deg, #6366f1, #8b5cf6);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -96,25 +100,32 @@
             }
         }
 
-        /* Main Content */
+        /* Main Content - FIXED */
         .main {
-            padding-top: 56px;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* Screen Viewer */
-        .screen-container {
-            flex: 1;
-            position: relative;
-            background: #000;
+            position: fixed;
+            top: 56px;
+            left: 0;
+            right: 0;
+            bottom: 70px;
             overflow: hidden;
         }
 
+        /* Screen Container - FIXED */
+        .screen-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         #remoteScreen {
-            width: 100%;
-            height: 100%;
+            max-width: 100%;
+            max-height: 100%;
             object-fit: contain;
             background: #111;
         }
@@ -126,6 +137,38 @@
             right: 0;
             bottom: 0;
             pointer-events: auto;
+            cursor: crosshair;
+        }
+
+        /* Waiting indicator */
+        .waiting-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--text-secondary);
+            text-align: center;
+            z-index: 5;
+        }
+
+        .waiting-indicator.hidden {
+            display: none;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         /* Quick Action Bar */
@@ -141,6 +184,7 @@
             backdrop-filter: blur(20px);
             border-radius: 24px;
             border: 1px solid var(--border);
+            z-index: 50;
         }
 
         .quick-btn {
@@ -178,6 +222,7 @@
             display: flex;
             justify-content: space-around;
             padding-bottom: env(safe-area-inset-bottom);
+            z-index: 100;
         }
 
         .nav-item {
@@ -205,11 +250,11 @@
         /* Panels */
         .panel {
             display: none;
-            position: fixed;
-            top: 56px;
+            position: absolute;
+            top: 0;
             left: 0;
             right: 0;
-            bottom: 70px;
+            bottom: 0;
             background: var(--bg-primary);
             overflow-y: auto;
             padding: 16px;
@@ -230,6 +275,7 @@
             backdrop-filter: blur(20px);
             border-top: 1px solid var(--border);
             padding: 8px;
+            z-index: 60;
         }
 
         .keyboard.visible {
@@ -382,6 +428,7 @@
             border-top: 1px solid var(--border);
             display: flex;
             gap: 12px;
+            z-index: 60;
         }
 
         .chat-input {
@@ -416,6 +463,31 @@
             overflow-y: auto;
             color: #6ee7b7;
         }
+
+        /* Frame Stats */
+        .frame-stats {
+            position: fixed;
+            top: 60px;
+            right: 8px;
+            font-size: 10px;
+            color: var(--text-secondary);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 4px 8px;
+            border-radius: 4px;
+            z-index: 101;
+        }
+
+        @keyframes clickFade {
+            from {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            to {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
     </style>
 </head>
 
@@ -429,13 +501,21 @@
         </div>
     </header>
 
+    <!-- Frame Stats -->
+    <div class="frame-stats" id="frameStats">FPS: 0 | Frames: 0</div>
+
     <!-- Main Content -->
     <main class="main">
         <!-- Screen Panel (Default) -->
         <div class="panel active" id="screenPanel">
             <div class="screen-container">
-                <canvas id="remoteScreen"></canvas>
+                <canvas id="remoteScreen" width="1920" height="1080"></canvas>
                 <div class="screen-overlay" id="screenOverlay"></div>
+                <div class="waiting-indicator" id="waitingIndicator">
+                    <div class="spinner"></div>
+                    <div>Waiting for screen...</div>
+                    <div style="font-size: 12px; margin-top: 8px;">Click "Connect" below</div>
+                </div>
             </div>
         </div>
 
@@ -595,7 +675,9 @@
             connected: false,
             modifiers: { ctrl: false, alt: false, shift: false, win: false },
             lastPing: 0,
-            frameCount: 0
+            frameCount: 0,
+            lastFrameTime: 0,
+            fps: 0
         };
 
         // ============================================================================
@@ -605,6 +687,7 @@
         const canvas = $('remoteScreen');
         const ctx = canvas.getContext('2d');
         const overlay = $('screenOverlay');
+        const waitingIndicator = $('waitingIndicator');
 
         // ============================================================================
         // Logging
@@ -648,15 +731,12 @@
 
             state.ws.onopen = () => {
                 addLog('WebSocket connected, authenticating...');
-                // Double-check readyState before sending
                 if (state.ws.readyState === WebSocket.OPEN) {
                     state.ws.send(JSON.stringify({
                         type: 'auth',
                         sessionId: sessionId,
                         clientType: 'mobile'
                     }));
-                } else {
-                    addLog('WebSocket not ready for send');
                 }
             };
 
@@ -672,14 +752,13 @@
             state.ws.onclose = () => {
                 addLog('Connection closed');
                 setConnectionStatus(false);
-                // Only reconnect if we were previously connected
                 if (state.connected) {
                     reconnectTimeout = setTimeout(() => connect(), 3000);
                 }
             };
 
             state.ws.onerror = (e) => {
-                addLog(`Connection error`);
+                addLog('Connection error');
             };
         }
 
@@ -700,44 +779,62 @@
                     break;
 
                 case 'peer_connected':
-                    addLog(`PC Agent connected!`);
+                    addLog('PC Agent connected!');
                     break;
 
                 case 'peer_disconnected':
-                    addLog(`PC Agent disconnected`);
+                    addLog('PC Agent disconnected');
+                    waitingIndicator.classList.remove('hidden');
                     break;
 
                 case 'commandResult':
-                    addLog(`Command result: ${JSON.stringify(data)}`);
                     addChatMessage('bot', data.result || data.error || 'Command executed');
                     break;
             }
         }
 
         // ============================================================================
-        // Frame Rendering (Platinum Canvas Strategy)
+        // Frame Rendering
         // ============================================================================
         const tempImg = new Image();
 
         tempImg.onload = () => {
-            canvas.width = tempImg.naturalWidth || 1920;
-            canvas.height = tempImg.naturalHeight || 1080;
+            // Hide waiting indicator on first frame
+            waitingIndicator.classList.add('hidden');
+
+            // Resize canvas to match frame
+            if (canvas.width !== tempImg.naturalWidth || canvas.height !== tempImg.naturalHeight) {
+                canvas.width = tempImg.naturalWidth || 1920;
+                canvas.height = tempImg.naturalHeight || 1080;
+            }
             ctx.drawImage(tempImg, 0, 0);
+        };
+
+        tempImg.onerror = () => {
+            console.error('Failed to load frame image');
         };
 
         function renderFrame(data) {
             state.frameCount++;
+
+            // Calculate FPS
+            const now = Date.now();
+            if (state.lastFrameTime > 0) {
+                const delta = now - state.lastFrameTime;
+                state.fps = Math.round(1000 / delta);
+            }
+            state.lastFrameTime = now;
+
+            // Update stats display
+            $('frameStats').textContent = `FPS: ${state.fps} | Frames: ${state.frameCount}`;
+
+            // Load and render frame
             tempImg.src = `data:image/jpeg;base64,${data.data}`;
 
-            // Update latency estimate
+            // Update latency
             if (data.timestamp) {
                 const latency = Date.now() - data.timestamp;
                 $('latency').textContent = `${latency}ms`;
-            }
-
-            // Log every 100 frames
-            if (state.frameCount % 100 === 0) {
-                addLog(`📸 Received ${state.frameCount} frames`);
             }
         }
 
@@ -759,6 +856,10 @@
             state.connected = connected;
             $('statusDot').classList.toggle('connected', connected);
             $('statusText').textContent = connected ? 'Connected' : 'Disconnected';
+
+            if (!connected) {
+                waitingIndicator.classList.remove('hidden');
+            }
         }
 
         // ============================================================================
@@ -770,7 +871,7 @@
             }
         }
 
-        // Touch → Click
+        // Touch/Click → PC Click
         overlay.addEventListener('click', (e) => {
             const rect = canvas.getBoundingClientRect();
             const x = (e.clientX - rect.left) / rect.width;
@@ -783,7 +884,6 @@
                 button: 'left'
             });
 
-            // Visual feedback
             showClickFeedback(e.clientX, e.clientY);
         });
 
@@ -810,15 +910,6 @@
         overlay.addEventListener('touchend', () => clearTimeout(pressTimer));
         overlay.addEventListener('touchmove', () => clearTimeout(pressTimer));
 
-        // Mouse move tracking
-        overlay.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left) / rect.width;
-            const y = (e.clientY - rect.top) / rect.height;
-
-            sendInput({ type: 'move', x, y });
-        });
-
         // Scroll
         overlay.addEventListener('wheel', (e) => {
             e.preventDefault();
@@ -832,16 +923,16 @@
         function showClickFeedback(x, y) {
             const dot = document.createElement('div');
             dot.style.cssText = `
-            position: fixed;
-            left: ${x - 10}px;
-            top: ${y - 10}px;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: rgba(99, 102, 241, 0.5);
-            pointer-events: none;
-            animation: clickFade 0.3s ease-out forwards;
-        `;
+                position: fixed;
+                left: ${x - 10}px;
+                top: ${y - 10}px;
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                background: rgba(99, 102, 241, 0.5);
+                pointer-events: none;
+                animation: clickFade 0.3s ease-out forwards;
+            `;
             document.body.appendChild(dot);
             setTimeout(() => dot.remove(), 300);
         }
@@ -861,11 +952,9 @@
                 const mod = key.dataset.mod;
 
                 if (mod) {
-                    // Toggle modifier
                     state.modifiers[mod] = !state.modifiers[mod];
                     key.classList.toggle('active', state.modifiers[mod]);
                 } else {
-                    // Send key
                     let keyValue = key.dataset.key || key.textContent;
                     if (keyValue === '⌫') keyValue = 'backspace';
                     if (keyValue === 'Space') keyValue = 'space';
@@ -905,14 +994,14 @@
             const messages = $('chatMessages');
             const msg = document.createElement('div');
             msg.style.cssText = `
-            padding: 12px 16px;
-            margin: 8px 0;
-            border-radius: 16px;
-            max-width: 80%;
-            ${type === 'user'
+                padding: 12px 16px;
+                margin: 8px 0;
+                border-radius: 16px;
+                max-width: 80%;
+                ${type === 'user'
                     ? 'background: var(--accent); margin-left: auto;'
                     : 'background: var(--bg-secondary);'}
-        `;
+            `;
             msg.textContent = text;
             messages.appendChild(msg);
             messages.scrollTop = messages.scrollHeight;
@@ -947,8 +1036,10 @@
                 item.classList.add('active');
                 $(item.dataset.panel).classList.add('active');
 
-                // Show/hide quick bar based on panel
+                // Show/hide quick bar and chat input based on panel
                 $('quickBar').style.display = item.dataset.panel === 'screenPanel' ? 'flex' : 'none';
+                document.querySelector('.chat-input-container').style.display =
+                    item.dataset.panel === 'chatPanel' ? 'flex' : 'none';
             });
         });
 
@@ -957,7 +1048,16 @@
         });
 
         $('connectSubmit').addEventListener('click', () => {
+            localStorage.setItem('serverUrl', $('serverUrl').value);
+            localStorage.setItem('sessionId', $('sessionId').value);
             connect();
+        });
+
+        // Close modal on outside click
+        $('connectModal').addEventListener('click', (e) => {
+            if (e.target === $('connectModal')) {
+                $('connectModal').classList.remove('visible');
+            }
         });
 
         // ============================================================================
@@ -969,21 +1069,16 @@
         if (savedUrl) $('serverUrl').value = savedUrl;
         if (savedSession) $('sessionId').value = savedSession;
 
-        // Save settings on connect
-        $('connectSubmit').addEventListener('click', () => {
-            localStorage.setItem('serverUrl', $('serverUrl').value);
-            localStorage.setItem('sessionId', $('sessionId').value);
-        });
+        // Init canvas with dark background
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#333';
+        ctx.font = '20px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Waiting for connection...', canvas.width / 2, canvas.height / 2);
 
-        // Add click animation keyframes
-        const style = document.createElement('style');
-        style.textContent = `
-        @keyframes clickFade {
-            from { transform: scale(1); opacity: 1; }
-            to { transform: scale(2); opacity: 0; }
-        }
-    `;
-        document.head.appendChild(style);
+        // Hide chat input initially
+        document.querySelector('.chat-input-container').style.display = 'none';
 
         addLog('Remote Control initialized');
     </script>
