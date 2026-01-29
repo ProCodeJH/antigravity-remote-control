@@ -36,6 +36,10 @@ class Config:
     capture_fps: int = 15
     jpeg_quality: int = 60
     monitor: int = 1  # Primary monitor
+    # Dynamic quality settings
+    adaptive_quality: bool = True
+    min_quality: int = 30
+    max_quality: int = 80
 
 CONFIG = Config()
 
@@ -43,11 +47,33 @@ CONFIG = Config()
 # Screen Capture Engine
 # ============================================================================
 class ScreenCapture:
-    """BitBlt 기반 고성능 스크린 캡처"""
+    """BitBlt 기반 고성능 스크린 캡처 (동적 품질 조절 지원)"""
     
     def __init__(self):
         self.sct = mss.mss()
         self.frame_id = 0
+        self.current_quality = CONFIG.jpeg_quality
+        self.frame_times = []
+        self.quality_mode = 'auto'  # 'auto', 'low', 'high'
+        
+    def set_quality_mode(self, mode: str):
+        """품질 모드 설정"""
+        self.quality_mode = mode
+        if mode == 'low':
+            self.current_quality = CONFIG.min_quality
+        elif mode == 'high':
+            self.current_quality = CONFIG.max_quality
+        print(f"[CAPTURE] Quality mode: {mode}, quality: {self.current_quality}")
+        
+    def adjust_quality(self, network_latency: float):
+        """네트워크 상태에 따라 품질 자동 조절"""
+        if not CONFIG.adaptive_quality or self.quality_mode != 'auto':
+            return
+        
+        if network_latency > 200:  # 높은 지연
+            self.current_quality = max(CONFIG.min_quality, self.current_quality - 5)
+        elif network_latency < 50:  # 낮은 지연
+            self.current_quality = min(CONFIG.max_quality, self.current_quality + 2)
         
     def capture_frame(self) -> dict:
         """화면 캡처 및 JPEG 인코딩"""
@@ -63,9 +89,9 @@ class ScreenCapture:
             if img.size != (CONFIG.screen_width, CONFIG.screen_height):
                 img = img.resize((CONFIG.screen_width, CONFIG.screen_height), Image.LANCZOS)
             
-            # JPEG 인코딩
+            # JPEG 인코딩 (동적 품질)
             buffer = io.BytesIO()
-            img.save(buffer, format='JPEG', quality=CONFIG.jpeg_quality, optimize=True)
+            img.save(buffer, format='JPEG', quality=self.current_quality, optimize=True)
             jpeg_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
             
             self.frame_id += 1
@@ -145,6 +171,19 @@ class InputInjector:
                 pyautogui.drag(end_x - start_x, end_y - start_y, duration=0.3)
                 print(f"[INPUT] Drag: ({start_x},{start_y}) -> ({end_x},{end_y})")
                 
+            elif event_type == "zoom":
+                # Pinch zoom → Ctrl + Scroll (browser zoom)
+                delta = event.get("delta", 0)
+                x = int(event.get("x", 0.5) * CONFIG.screen_width)
+                y = int(event.get("y", 0.5) * CONFIG.screen_height)
+                pyautogui.moveTo(x, y)
+                # Ctrl + scroll for zoom
+                pyautogui.keyDown('ctrl')
+                clicks = 1 if delta > 0 else -1
+                pyautogui.scroll(clicks)
+                pyautogui.keyUp('ctrl')
+                print(f"[INPUT] Zoom: {'+' if delta > 0 else '-'} at ({x},{y})")
+                
         except Exception as e:
             print(f"[ERROR] Input injection failed: {e}")
 
@@ -192,6 +231,39 @@ class SystemMonitor:
             return {"type": "status", "error": str(e)}
 
 # ============================================================================
+# Clipboard Sync
+# ============================================================================
+class ClipboardSync:
+    """PC ↔ 모바일 클립보드 동기화"""
+    
+    def __init__(self):
+        self.last_content = ""
+        
+    def get_clipboard(self) -> Optional[str]:
+        """PC 클립보드 내용 반환 (변경시에만)"""
+        try:
+            import pyperclip
+            content = pyperclip.paste()
+            if content and content != self.last_content:
+                self.last_content = content
+                return content
+        except Exception as e:
+            print(f"[CLIPBOARD] Read error: {e}")
+        return None
+        
+    def set_clipboard(self, content: str) -> bool:
+        """모바일에서 받은 내용을 PC 클립보드에 설정"""
+        try:
+            import pyperclip
+            pyperclip.copy(content)
+            self.last_content = content
+            print(f"[CLIPBOARD] Set: {content[:50]}...")
+            return True
+        except Exception as e:
+            print(f"[CLIPBOARD] Write error: {e}")
+            return False
+
+# ============================================================================
 # Antigravity Bridge
 # ============================================================================
 class AntigravityBridge:
@@ -232,21 +304,29 @@ class AntigravityBridge:
 # Main Agent
 # ============================================================================
 class RemoteAgent:
-    """통합 원격 제어 에이전트"""
+    """통합 원격 제어 에이전트 (재연결 강화)"""
+    
+    # 재연결 설정
+    MAX_RECONNECT_ATTEMPTS = 10
+    BACKOFF_MULTIPLIER = 1.5
+    MAX_BACKOFF_DELAY = 60
     
     def __init__(self):
         self.capture = ScreenCapture()
         self.injector = InputInjector()
         self.monitor = SystemMonitor()
         self.bridge = AntigravityBridge()
+        self.clipboard = ClipboardSync()
         self.ws: Optional[websockets.WebSocketClientProtocol] = None
         self.running = False
+        self.reconnect_attempts = 0
+        self.reconnect_delay = 3
         
     async def connect(self):
-        """릴레이 서버에 연결"""
+        """릴레이 서버에 연결 (지수 백오프 재연결)"""
         print(f"[AGENT] Connecting to {CONFIG.relay_url}...")
         
-        while True:
+        while self.reconnect_attempts < self.MAX_RECONNECT_ATTEMPTS:
             try:
                 self.ws = await websockets.connect(CONFIG.relay_url)
                 print("[AGENT] WebSocket connected!")
@@ -264,14 +344,23 @@ class RemoteAgent:
                 
                 if data.get("type") == "auth_success":
                     print(f"[AGENT] Authenticated: {data}")
+                    # 성공시 재연결 카운터 리셋
+                    self.reconnect_attempts = 0
+                    self.reconnect_delay = 3
                     return True
                 else:
                     print(f"[AGENT] Auth failed: {data}")
                     return False
                     
             except Exception as e:
-                print(f"[AGENT] Connection failed: {e}, retrying in 3s...")
-                await asyncio.sleep(3)
+                self.reconnect_attempts += 1
+                print(f"[AGENT] Connection failed ({self.reconnect_attempts}/{self.MAX_RECONNECT_ATTEMPTS}): {e}")
+                print(f"[AGENT] Retrying in {self.reconnect_delay:.1f}s...")
+                await asyncio.sleep(self.reconnect_delay)
+                self.reconnect_delay = min(self.reconnect_delay * self.BACKOFF_MULTIPLIER, self.MAX_BACKOFF_DELAY)
+        
+        print("[AGENT] Max reconnection attempts reached.")
+        return False
                 
     async def send_frames(self):
         """프레임 스트리밍 루프"""
@@ -314,9 +403,20 @@ class RemoteAgent:
                 
                 msg_type = data.get("type")
                 
-                if msg_type in ["click", "move", "key", "scroll", "drag"]:
+                if msg_type in ["click", "move", "key", "scroll", "drag", "zoom"]:
                     # 입력 이벤트
                     self.injector.handle_input(data)
+                    
+                elif msg_type == "quality":
+                    # 화면 품질 조절 요청
+                    level = data.get("level", "auto")
+                    self.capture.set_quality_mode(level)
+                    
+                elif msg_type == "clipboard_sync":
+                    # 모바일에서 클립보드 동기화 요청
+                    content = data.get("content", "")
+                    if content:
+                        self.clipboard.set_clipboard(content)
                     
                 elif msg_type == "command":
                     # Antigravity 명령

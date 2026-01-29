@@ -209,6 +209,71 @@
             box-shadow: 0 0 20px var(--accent-glow);
         }
 
+        /* Quality Control Bar */
+        .quality-bar {
+            position: fixed;
+            bottom: 140px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            gap: 4px;
+            padding: 6px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            z-index: 50;
+        }
+
+        .quality-bar.visible {
+            display: flex;
+        }
+
+        .quality-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: none;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quality-btn.active {
+            background: var(--accent);
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 160px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            padding: 12px 20px;
+            border-radius: 24px;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            font-size: 14px;
+            z-index: 200;
+            animation: toastIn 0.3s ease-out;
+        }
+
+        @keyframes toastIn {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
         /* Bottom Nav */
         .bottom-nav {
             position: fixed;
@@ -569,9 +634,17 @@
     <div class="quick-bar" id="quickBar">
         <button class="quick-btn" id="btnRightClick" title="Right Click">🖱️</button>
         <button class="quick-btn" id="btnKeyboard" title="Keyboard">⌨️</button>
+        <button class="quick-btn" id="btnClipboard" title="Sync Clipboard">📋</button>
         <button class="quick-btn" id="btnEsc" title="ESC">✕</button>
         <button class="quick-btn" id="btnTab" title="TAB">⇥</button>
         <button class="quick-btn" id="btnEnter" title="Enter">↵</button>
+    </div>
+
+    <!-- Quality Control Bar -->
+    <div class="quality-bar" id="qualityBar">
+        <button class="quality-btn" data-quality="low" title="Low Quality">📉</button>
+        <button class="quality-btn active" data-quality="auto" title="Auto Quality">🔄</button>
+        <button class="quality-btn" data-quality="high" title="High Quality">📈</button>
     </div>
 
     <!-- Virtual Keyboard -->
@@ -790,6 +863,10 @@
                 case 'commandResult':
                     addChatMessage('bot', data.result || data.error || 'Command executed');
                     break;
+
+                case 'clipboard_update':
+                    handleClipboardUpdate(data.content);
+                    break;
             }
         }
 
@@ -871,8 +948,34 @@
             }
         }
 
-        // Touch/Click → PC Click
+        // Helper: Get normalized coordinates (0.0 to 1.0)
+        function getNormalizedCoords(touch) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width)),
+                y: Math.max(0, Math.min(1, (touch.clientY - rect.top) / rect.height))
+            };
+        }
+
+        // ============================================================================
+        // Enhanced Gesture System
+        // ============================================================================
+        let gestureState = {
+            isDragging: false,
+            isRightClickPending: false,
+            dragStart: { x: 0, y: 0 },
+            lastPosition: { x: 0, y: 0 },
+            lastPinchDistance: 0,
+            lastMidY: 0,
+            touchStartTime: 0,
+            hasMoved: false
+        };
+
+        // Touch/Click → PC Click (mouse events for desktop testing)
         overlay.addEventListener('click', (e) => {
+            // Ignore if touch event already handled
+            if (e.sourceCapabilities?.firesTouchEvents) return;
+
             const rect = canvas.getBoundingClientRect();
             const x = (e.clientX - rect.left) / rect.width;
             const y = (e.clientY - rect.top) / rect.height;
@@ -887,30 +990,161 @@
             showClickFeedback(e.clientX, e.clientY);
         });
 
-        // Long press → Right click
+        // Long press timer
         let pressTimer = null;
+
+        // Touch Start: Initialize gesture tracking
         overlay.addEventListener('touchstart', (e) => {
-            pressTimer = setTimeout(() => {
+            const touch = e.touches[0];
+            const coords = getNormalizedCoords(touch);
+
+            gestureState.dragStart = coords;
+            gestureState.lastPosition = coords;
+            gestureState.touchStartTime = Date.now();
+            gestureState.isDragging = false;
+            gestureState.hasMoved = false;
+            gestureState.isRightClickPending = false;
+            gestureState.lastPinchDistance = 0;
+            gestureState.lastMidY = 0;
+
+            // Long press for right click (single finger only)
+            if (e.touches.length === 1) {
+                pressTimer = setTimeout(() => {
+                    if (!gestureState.hasMoved) {
+                        gestureState.isRightClickPending = true;
+                        sendInput({
+                            type: 'click',
+                            x: coords.x,
+                            y: coords.y,
+                            button: 'right'
+                        });
+                        navigator.vibrate?.(50);
+                        showClickFeedback(touch.clientX, touch.clientY, '#ef4444');
+                    }
+                }, 500);
+            }
+        }, { passive: true });
+
+        // Touch Move: Handle drag, pinch-zoom, and two-finger scroll
+        overlay.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            clearTimeout(pressTimer);
+            gestureState.hasMoved = true;
+
+            if (e.touches.length === 1) {
+                // Single finger: Drag/Move
                 const touch = e.touches[0];
-                const rect = canvas.getBoundingClientRect();
-                const x = (touch.clientX - rect.left) / rect.width;
-                const y = (touch.clientY - rect.top) / rect.height;
+                const current = getNormalizedCoords(touch);
 
+                // Calculate movement distance
+                const dx = Math.abs(current.x - gestureState.dragStart.x);
+                const dy = Math.abs(current.y - gestureState.dragStart.y);
+
+                // Start dragging if moved significantly
+                if (dx > 0.02 || dy > 0.02) {
+                    gestureState.isDragging = true;
+
+                    // Send mouse move for real-time cursor tracking
+                    sendInput({
+                        type: 'move',
+                        x: current.x,
+                        y: current.y
+                    });
+                }
+
+                gestureState.lastPosition = current;
+
+            } else if (e.touches.length === 2) {
+                // Two fingers: Pinch-zoom or scroll
+                const touch1 = e.touches[0];
+                const touch2 = e.touches[1];
+
+                // Calculate pinch distance
+                const currentDist = Math.hypot(
+                    touch1.clientX - touch2.clientX,
+                    touch1.clientY - touch2.clientY
+                );
+
+                // Calculate mid-point Y for scroll detection
+                const midY = (touch1.clientY + touch2.clientY) / 2;
+
+                if (gestureState.lastPinchDistance > 0) {
+                    const pinchDelta = currentDist - gestureState.lastPinchDistance;
+                    const scrollDelta = gestureState.lastMidY - midY;
+
+                    // Determine if pinch or scroll based on dominant motion
+                    if (Math.abs(pinchDelta) > Math.abs(scrollDelta) * 2 && Math.abs(pinchDelta) > 10) {
+                        // Pinch zoom (Ctrl + Wheel)
+                        sendInput({
+                            type: 'zoom',
+                            delta: pinchDelta / 50,
+                            // Send center point for zoom
+                            x: (getNormalizedCoords(touch1).x + getNormalizedCoords(touch2).x) / 2,
+                            y: (getNormalizedCoords(touch1).y + getNormalizedCoords(touch2).y) / 2
+                        });
+                    } else if (Math.abs(scrollDelta) > 5) {
+                        // Two-finger scroll
+                        sendInput({
+                            type: 'scroll',
+                            deltaX: 0,
+                            deltaY: scrollDelta * 3
+                        });
+                    }
+                }
+
+                gestureState.lastPinchDistance = currentDist;
+                gestureState.lastMidY = midY;
+            }
+        }, { passive: false });
+
+        // Touch End: Complete gestures
+        overlay.addEventListener('touchend', (e) => {
+            clearTimeout(pressTimer);
+
+            // Skip if right-click was already triggered
+            if (gestureState.isRightClickPending) {
+                gestureState.isRightClickPending = false;
+                return;
+            }
+
+            if (gestureState.isDragging && e.changedTouches.length > 0) {
+                // Complete drag operation
+                const endCoords = getNormalizedCoords(e.changedTouches[0]);
                 sendInput({
-                    type: 'click',
-                    x: x,
-                    y: y,
-                    button: 'right'
+                    type: 'drag',
+                    startX: gestureState.dragStart.x,
+                    startY: gestureState.dragStart.y,
+                    endX: endCoords.x,
+                    endY: endCoords.y
                 });
+            } else if (!gestureState.hasMoved && e.changedTouches.length > 0) {
+                // Tap (short press without move) → Left click
+                const touchDuration = Date.now() - gestureState.touchStartTime;
+                if (touchDuration < 300) {
+                    const coords = getNormalizedCoords(e.changedTouches[0]);
+                    sendInput({
+                        type: 'click',
+                        x: coords.x,
+                        y: coords.y,
+                        button: 'left'
+                    });
+                    showClickFeedback(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+                }
+            }
 
-                navigator.vibrate?.(50);
-            }, 500);
+            // Reset state
+            gestureState.isDragging = false;
+            gestureState.lastPinchDistance = 0;
+            gestureState.lastMidY = 0;
         });
 
-        overlay.addEventListener('touchend', () => clearTimeout(pressTimer));
-        overlay.addEventListener('touchmove', () => clearTimeout(pressTimer));
+        overlay.addEventListener('touchcancel', () => {
+            clearTimeout(pressTimer);
+            gestureState.isDragging = false;
+            gestureState.lastPinchDistance = 0;
+        });
 
-        // Scroll
+        // Mouse wheel scroll
         overlay.addEventListener('wheel', (e) => {
             e.preventDefault();
             sendInput({
@@ -920,7 +1154,7 @@
             });
         }, { passive: false });
 
-        function showClickFeedback(x, y) {
+        function showClickFeedback(x, y, color = 'rgba(99, 102, 241, 0.5)') {
             const dot = document.createElement('div');
             dot.style.cssText = `
                 position: fixed;
@@ -929,7 +1163,7 @@
                 width: 20px;
                 height: 20px;
                 border-radius: 50%;
-                background: rgba(99, 102, 241, 0.5);
+                background: ${color};
                 pointer-events: none;
                 animation: clickFade 0.3s ease-out forwards;
             `;
@@ -986,6 +1220,86 @@
         $('btnEnter').addEventListener('click', () => {
             sendInput({ type: 'key', key: 'enter', modifiers: {} });
         });
+
+        // ============================================================================
+        // Clipboard Sync
+        // ============================================================================
+        $('btnClipboard').addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    sendInput({ type: 'clipboard_sync', content: text });
+                    showToast('📋 클립보드 전송됨');
+                } else {
+                    showToast('⚠️ 클립보드 비어있음');
+                }
+            } catch (e) {
+                console.error('Clipboard access denied:', e);
+                showToast('⛔ 클립보드 접근 거부');
+            }
+        });
+
+        // Handle clipboard updates from PC
+        function handleClipboardUpdate(content) {
+            navigator.clipboard.writeText(content).then(() => {
+                showToast('📋 PC 클립보드 수신됨');
+            }).catch(e => {
+                console.error('Clipboard write failed:', e);
+            });
+        }
+
+        // ============================================================================
+        // Quality Control
+        // ============================================================================
+        const qualityBar = $('qualityBar');
+        let qualityBarTimeout = null;
+
+        // Long press on screen to show quality bar
+        let qualityPressTimer = null;
+        document.querySelector('.header').addEventListener('dblclick', () => {
+            qualityBar.classList.toggle('visible');
+            if (qualityBar.classList.contains('visible')) {
+                clearTimeout(qualityBarTimeout);
+                qualityBarTimeout = setTimeout(() => {
+                    qualityBar.classList.remove('visible');
+                }, 5000);
+            }
+        });
+
+        document.querySelectorAll('.quality-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const quality = btn.dataset.quality;
+
+                // Update active state
+                document.querySelectorAll('.quality-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Send quality request
+                sendInput({ type: 'quality', level: quality });
+                showToast(`📊 품질: ${quality === 'low' ? '저화질' : quality === 'high' ? '고화질' : '자동'}`);
+
+                // Auto-hide quality bar
+                clearTimeout(qualityBarTimeout);
+                qualityBarTimeout = setTimeout(() => {
+                    qualityBar.classList.remove('visible');
+                }, 2000);
+            });
+        });
+
+        // ============================================================================
+        // Toast Notifications
+        // ============================================================================
+        function showToast(message, duration = 2000) {
+            const existingToast = document.querySelector('.toast');
+            if (existingToast) existingToast.remove();
+
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.remove(), duration);
+        }
 
         // ============================================================================
         // Chat
