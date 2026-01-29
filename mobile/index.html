@@ -274,6 +274,129 @@
             }
         }
 
+        /* File Transfer Panel */
+        .files-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .file-refresh-btn {
+            background: var(--bg-secondary);
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .file-upload-section {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .file-upload-btn {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, var(--accent), #7c3aed);
+            color: white;
+            text-align: center;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .file-progress {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .progress-bar {
+            flex: 1;
+            height: 8px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width 0.2s;
+        }
+
+        .progress-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            min-width: 40px;
+        }
+
+        .file-list-header {
+            padding: 12px 16px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .file-list {
+            padding: 8px;
+            overflow-y: auto;
+            max-height: calc(100vh - 350px);
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .file-item:active {
+            background: var(--bg-tertiary);
+        }
+
+        .file-icon {
+            font-size: 24px;
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-name {
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .file-size {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .file-download-btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
         /* Bottom Nav */
         .bottom-nav {
             position: fixed;
@@ -628,6 +751,38 @@
                 <button class="chat-send" id="chatSend">➤</button>
             </div>
         </div>
+
+        <!-- Files Panel -->
+        <div class="panel" id="filesPanel">
+            <div class="files-header">
+                <h3 style="margin: 0; color: var(--text-primary);">📁 File Transfer</h3>
+                <button class="file-refresh-btn" id="refreshFiles">🔄</button>
+            </div>
+
+            <!-- Upload Section -->
+            <div class="file-upload-section">
+                <label class="file-upload-btn" for="fileUploadInput">
+                    📤 Upload to PC
+                    <input type="file" id="fileUploadInput" style="display: none;" multiple>
+                </label>
+                <div id="uploadProgress" class="file-progress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="uploadFill"></div>
+                    </div>
+                    <span class="progress-text" id="uploadText">0%</span>
+                </div>
+            </div>
+
+            <!-- File List -->
+            <div class="file-list-header">
+                <span>PC Downloads Folder</span>
+            </div>
+            <div class="file-list" id="fileList">
+                <p style="color: var(--text-secondary); text-align: center; padding: 20px;">
+                    Connect to see files
+                </p>
+            </div>
+        </div>
     </main>
 
     <!-- Quick Action Bar -->
@@ -635,6 +790,7 @@
         <button class="quick-btn" id="btnRightClick" title="Right Click">🖱️</button>
         <button class="quick-btn" id="btnKeyboard" title="Keyboard">⌨️</button>
         <button class="quick-btn" id="btnClipboard" title="Sync Clipboard">📋</button>
+        <button class="quick-btn" id="btnAudio" title="Audio">🔇</button>
         <button class="quick-btn" id="btnEsc" title="ESC">✕</button>
         <button class="quick-btn" id="btnTab" title="TAB">⇥</button>
         <button class="quick-btn" id="btnEnter" title="Enter">↵</button>
@@ -712,6 +868,10 @@
         <div class="nav-item" data-panel="statusPanel">
             <span class="nav-icon">📊</span>
             <span>Status</span>
+        </div>
+        <div class="nav-item" data-panel="filesPanel">
+            <span class="nav-icon">📁</span>
+            <span>Files</span>
         </div>
         <div class="nav-item" data-panel="chatPanel">
             <span class="nav-icon">💬</span>
@@ -866,6 +1026,52 @@
 
                 case 'clipboard_update':
                     handleClipboardUpdate(data.content);
+                    break;
+
+                // File Transfer Events
+                case 'file_list':
+                    renderFileList(data.files);
+                    break;
+
+                case 'file_start':
+                    handleFileStart(data);
+                    break;
+
+                case 'file_chunk':
+                    handleFileChunk(data);
+                    break;
+
+                case 'file_complete':
+                    handleFileComplete(data);
+                    break;
+
+                case 'file_upload_result':
+                    if (data.success) {
+                        const upload = activeUploads.get(data.fileId);
+                        if (upload) upload.resolve();
+                        activeUploads.delete(data.fileId);
+                    }
+                    break;
+
+                case 'file_progress':
+                    console.log(`Upload progress: ${data.progress}%`);
+                    break;
+
+                // Audio Events
+                case 'audio_frame':
+                    handleAudioFrame(data);
+                    break;
+
+                case 'audio_started':
+                    handleAudioStarted(data);
+                    break;
+
+                case 'audio_stopped':
+                    handleAudioStopped();
+                    break;
+
+                case 'audio_error':
+                    handleAudioError(data);
                     break;
             }
         }
@@ -1222,6 +1428,92 @@
         });
 
         // ============================================================================
+        // Audio Streaming
+        // ============================================================================
+        let audioEnabled = false;
+        let audioContext = null;
+        let audioQueue = [];
+
+        $('btnAudio').addEventListener('click', () => {
+            audioEnabled = !audioEnabled;
+            $('btnAudio').textContent = audioEnabled ? '🔊' : '🔇';
+            $('btnAudio').classList.toggle('active', audioEnabled);
+
+            if (audioEnabled) {
+                initAudioContext();
+                state.ws?.send(JSON.stringify({ type: 'audio_start' }));
+                showToast('🎵 오디오 스트리밍 시작');
+            } else {
+                state.ws?.send(JSON.stringify({ type: 'audio_stop' }));
+                showToast('🔇 오디오 스트리밍 중지');
+            }
+        });
+
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 48000
+                });
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+
+        function handleAudioFrame(data) {
+            if (!audioEnabled || !audioContext) return;
+
+            try {
+                const audioData = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
+
+                // Convert to Int16Array then to Float32Array
+                const int16Data = new Int16Array(audioData.buffer);
+                const floatData = new Float32Array(int16Data.length);
+
+                for (let i = 0; i < int16Data.length; i++) {
+                    floatData[i] = int16Data[i] / 32768.0;
+                }
+
+                // Create audio buffer (stereo)
+                const channels = 2;
+                const samplesPerChannel = floatData.length / channels;
+                const audioBuffer = audioContext.createBuffer(channels, samplesPerChannel, 48000);
+
+                // Deinterleave stereo audio
+                for (let ch = 0; ch < channels; ch++) {
+                    const channelData = audioBuffer.getChannelData(ch);
+                    for (let i = 0; i < samplesPerChannel; i++) {
+                        channelData[i] = floatData[i * channels + ch];
+                    }
+                }
+
+                // Play audio
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                source.start();
+
+            } catch (e) {
+                console.error('[AUDIO] Playback error:', e);
+            }
+        }
+
+        function handleAudioStarted(data) {
+            console.log('[AUDIO] Streaming started:', data);
+        }
+
+        function handleAudioStopped() {
+            console.log('[AUDIO] Streaming stopped');
+        }
+
+        function handleAudioError(data) {
+            showToast(`⛔ Audio: ${data.error}`);
+            audioEnabled = false;
+            $('btnAudio').textContent = '🔇';
+            $('btnAudio').classList.remove('active');
+        }
+
+        // ============================================================================
         // Clipboard Sync
         // ============================================================================
         $('btnClipboard').addEventListener('click', async () => {
@@ -1300,6 +1592,208 @@
 
             setTimeout(() => toast.remove(), duration);
         }
+
+        // ============================================================================
+        // File Transfer
+        // ============================================================================
+        const CHUNK_SIZE = 64 * 1024; // 64KB
+        let activeUploads = new Map();
+        let activeDownloads = new Map();
+
+        // Request file list from PC
+        function refreshFileList() {
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({ type: 'file_list_request' }));
+            }
+        }
+
+        // Render file list
+        function renderFileList(files) {
+            const fileList = $('fileList');
+            if (!files || files.length === 0) {
+                fileList.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 20px;">폴더가 비어있습니다</p>';
+                return;
+            }
+
+            fileList.innerHTML = files.map(file => `
+                <div class="file-item" data-path="${file.path}">
+                    <span class="file-icon">${getFileIcon(file.name)}</span>
+                    <div class="file-info">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${formatFileSize(file.size)}</div>
+                    </div>
+                    <button class="file-download-btn">📥</button>
+                </div>
+            `).join('');
+
+            // Add click handlers
+            fileList.querySelectorAll('.file-download-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const item = e.target.closest('.file-item');
+                    const path = item.dataset.path;
+                    requestFileDownload(path);
+                });
+            });
+        }
+
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const icons = {
+                'pdf': '📄', 'doc': '📝', 'docx': '📝',
+                'xls': '📊', 'xlsx': '📊', 'ppt': '📽️', 'pptx': '📽️',
+                'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️',
+                'mp4': '🎬', 'mp3': '🎵', 'zip': '📦', 'rar': '📦',
+                'txt': '📃', 'js': '💻', 'py': '💻', 'html': '💻'
+            };
+            return icons[ext] || '📄';
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // Upload file to PC
+        async function uploadFile(file) {
+            const fileId = crypto.randomUUID();
+            const reader = new FileReader();
+
+            return new Promise((resolve, reject) => {
+                reader.onload = async (e) => {
+                    const arrayBuffer = e.target.result;
+                    const totalChunks = Math.ceil(arrayBuffer.byteLength / CHUNK_SIZE);
+
+                    // Start upload
+                    state.ws.send(JSON.stringify({
+                        type: 'file_upload_start',
+                        fileId: fileId,
+                        name: file.name,
+                        size: file.size
+                    }));
+
+                    activeUploads.set(fileId, { name: file.name, resolve, reject });
+
+                    // Send chunks
+                    for (let i = 0; i < totalChunks; i++) {
+                        const start = i * CHUNK_SIZE;
+                        const end = Math.min(start + CHUNK_SIZE, arrayBuffer.byteLength);
+                        const chunk = arrayBuffer.slice(start, end);
+                        const base64 = btoa(String.fromCharCode(...new Uint8Array(chunk)));
+
+                        state.ws.send(JSON.stringify({
+                            type: 'file_chunk',
+                            fileId: fileId,
+                            index: i,
+                            totalChunks: totalChunks,
+                            offset: start,
+                            data: base64
+                        }));
+
+                        // Update progress
+                        const progress = ((i + 1) / totalChunks * 100).toFixed(0);
+                        $('uploadFill').style.width = progress + '%';
+                        $('uploadText').textContent = progress + '%';
+
+                        // Small delay to prevent overwhelming
+                        await new Promise(r => setTimeout(r, 10));
+                    }
+
+                    // Complete
+                    state.ws.send(JSON.stringify({
+                        type: 'file_upload_complete',
+                        fileId: fileId
+                    }));
+                };
+
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // Request file download from PC
+        function requestFileDownload(path) {
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({
+                    type: 'file_request',
+                    path: path
+                }));
+                showToast('📥 다운로드 시작...');
+            }
+        }
+
+        // Handle file download from PC
+        let pendingDownload = null;
+
+        function handleFileStart(data) {
+            pendingDownload = {
+                fileId: data.fileId,
+                name: data.name,
+                size: data.size,
+                mimeType: data.mimeType,
+                chunks: [],
+                received: 0
+            };
+        }
+
+        function handleFileChunk(data) {
+            if (pendingDownload && pendingDownload.fileId === data.fileId) {
+                const chunk = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
+                pendingDownload.chunks[data.index] = chunk;
+                pendingDownload.received += chunk.length;
+            }
+        }
+
+        function handleFileComplete(data) {
+            if (pendingDownload && pendingDownload.fileId === data.fileId) {
+                // Combine chunks
+                const combined = new Uint8Array(pendingDownload.size);
+                let offset = 0;
+                for (const chunk of pendingDownload.chunks) {
+                    combined.set(chunk, offset);
+                    offset += chunk.length;
+                }
+
+                // Download
+                const blob = new Blob([combined], { type: pendingDownload.mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = pendingDownload.name;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                showToast(`✅ ${pendingDownload.name} 다운로드 완료`);
+                pendingDownload = null;
+            }
+        }
+
+        // File upload input handler
+        $('fileUploadInput').addEventListener('change', async (e) => {
+            const files = e.target.files;
+            if (!files.length) return;
+
+            $('uploadProgress').style.display = 'flex';
+
+            for (const file of files) {
+                try {
+                    await uploadFile(file);
+                    showToast(`✅ ${file.name} 업로드 완료`);
+                } catch (err) {
+                    showToast(`❌ ${file.name} 업로드 실패`);
+                    console.error(err);
+                }
+            }
+
+            $('uploadProgress').style.display = 'none';
+            $('uploadFill').style.width = '0%';
+            e.target.value = ''; // Reset input
+            refreshFileList();
+        });
+
+        // Refresh button
+        $('refreshFiles').addEventListener('click', refreshFileList);
 
         // ============================================================================
         // Chat

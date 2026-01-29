@@ -23,6 +23,10 @@ from PIL import Image
 import psutil
 import aiohttp
 
+# Local imports
+from file_transfer import FileTransferManager
+from audio_stream import AudioStreamer
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -317,6 +321,8 @@ class RemoteAgent:
         self.monitor = SystemMonitor()
         self.bridge = AntigravityBridge()
         self.clipboard = ClipboardSync()
+        self.file_transfer = FileTransferManager()
+        self.audio_streamer = AudioStreamer()
         self.ws: Optional[websockets.WebSocketClientProtocol] = None
         self.running = False
         self.reconnect_attempts = 0
@@ -436,6 +442,63 @@ class RemoteAgent:
                     
                 elif msg_type == "peer_disconnected":
                     print(f"[AGENT] Mobile client disconnected")
+                
+                # ============================================================
+                # File Transfer Events
+                # ============================================================
+                elif msg_type == "file_upload_start":
+                    # 모바일에서 파일 업로드 시작
+                    result = self.file_transfer.start_receive(data)
+                    await self.ws.send(json.dumps({
+                        "type": "file_upload_ack",
+                        "fileId": data.get("fileId"),
+                        **result
+                    }))
+                    
+                elif msg_type == "file_chunk":
+                    # 파일 청크 수신
+                    result = self.file_transfer.receive_chunk(data)
+                    # 진행률만 주기적으로 전송 (매 10% 마다)
+                    if result.get("success") and int(result.get("progress", 0)) % 10 == 0:
+                        await self.ws.send(json.dumps({
+                            "type": "file_progress",
+                            "fileId": data.get("fileId"),
+                            "progress": result.get("progress", 0)
+                        }))
+                    
+                elif msg_type == "file_upload_complete":
+                    # 파일 업로드 완료
+                    result = self.file_transfer.complete_receive(data)
+                    await self.ws.send(json.dumps({
+                        "type": "file_upload_result",
+                        "fileId": data.get("fileId"),
+                        **result
+                    }))
+                    
+                elif msg_type == "file_request":
+                    # 모바일에서 PC 파일 요청
+                    file_path = data.get("path", "")
+                    if file_path:
+                        await self.file_transfer.send_file(self.ws, file_path)
+                    
+                elif msg_type == "file_list_request":
+                    # 다운로드 폴더 파일 목록 요청
+                    files = self.file_transfer.list_downloads()
+                    await self.ws.send(json.dumps({
+                        "type": "file_list",
+                        "files": files
+                    }))
+                
+                # ============================================================
+                # Audio Streaming Events
+                # ============================================================
+                elif msg_type == "audio_start":
+                    # 오디오 스트리밍 시작 요청
+                    await self.audio_streamer.start(self.ws)
+                    
+                elif msg_type == "audio_stop":
+                    # 오디오 스트리밍 중지 요청
+                    await self.audio_streamer.stop()
                     
             except websockets.ConnectionClosed:
                 print("[AGENT] Connection closed")
