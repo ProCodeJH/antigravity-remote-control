@@ -1122,11 +1122,13 @@
             <h2>Connect</h2>
             <div class="input-group">
                 <label>Server URL</label>
-                <input type="text" id="serverUrl" value="ws://localhost:8080/ws/relay" placeholder="ws://...">
+                <input type="text" id="serverUrl" value="wss://antigravity-relay.onrender.com/ws/relay"
+                    placeholder="wss://...">
             </div>
             <div class="input-group">
                 <label>Session ID</label>
-                <input type="text" id="sessionId" value="test-session" placeholder="Enter session ID">
+                <input type="text" id="sessionId" value="de68bf91-5d64-4239-880b-3e4ea72f6980"
+                    placeholder="Enter session ID">
             </div>
             <button class="btn-primary" id="connectSubmit">Connect</button>
         </div>
@@ -2236,6 +2238,12 @@
         }
 
         addLog('Remote Control initialized');
+
+        // Auto-connect on page load (1 second delay to ensure DOM ready)
+        setTimeout(() => {
+            addLog('Auto-connecting...');
+            connect();
+        }, 1000);
     </script>
 </body>
 
