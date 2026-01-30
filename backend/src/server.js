@@ -77,6 +77,38 @@ app.get('/api/sessions/:sessionId', async (request, reply) => {
     };
 });
 
+// Get latest session with connected agent
+app.get('/api/sessions/latest', async (request, reply) => {
+    // Find session with connected agent
+    for (const [sessionId, socket] of connections.agents) {
+        if (socket.readyState === 1) { // WebSocket.OPEN
+            const session = sessions.get(sessionId);
+            if (session) {
+                return {
+                    sessionId,
+                    ...session,
+                    agentConnected: true,
+                    mobileConnected: connections.mobiles.has(sessionId)
+                };
+            }
+        }
+    }
+
+    // No active agent, return most recent session
+    let latestSession = null;
+    for (const [id, session] of sessions) {
+        if (!latestSession || session.createdAt > latestSession.createdAt) {
+            latestSession = { sessionId: id, ...session };
+        }
+    }
+
+    if (latestSession) {
+        return latestSession;
+    }
+
+    return reply.status(404).send({ error: 'No sessions available' });
+});
+
 // Forward command to Antigravity
 app.post('/api/command', async (request, reply) => {
     const { sessionId, command, type } = request.body;

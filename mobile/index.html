@@ -1127,8 +1127,7 @@
             </div>
             <div class="input-group">
                 <label>Session ID</label>
-                <input type="text" id="sessionId" value="23fbf5cc-ed08-4038-9ac8-bf9829e1958d"
-                    placeholder="Enter session ID">
+                <input type="text" id="sessionId" value="auto" placeholder="auto = find active session">
             </div>
             <button class="btn-primary" id="connectSubmit">Connect</button>
         </div>
@@ -1173,7 +1172,24 @@
         // ============================================================================
         let reconnectTimeout = null;
 
-        function connect() {
+        async function fetchLatestSession(baseUrl) {
+            try {
+                const apiUrl = baseUrl.replace('wss://', 'https://').replace('ws://', 'http://').replace('/ws/relay', '');
+                const response = await fetch(`${apiUrl}/api/sessions/latest`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.sessionId && data.agentConnected) {
+                        addLog(`Found active session: ${data.sessionId.slice(0, 8)}...`);
+                        return data.sessionId;
+                    }
+                }
+            } catch (e) {
+                console.log('Failed to fetch latest session:', e);
+            }
+            return null;
+        }
+
+        async function connect() {
             // Prevent multiple simultaneous connections
             if (state.ws && (state.ws.readyState === WebSocket.CONNECTING || state.ws.readyState === WebSocket.OPEN)) {
                 addLog('Already connecting/connected, skipping...');
@@ -1186,7 +1202,20 @@
             }
 
             const url = $('serverUrl').value;
-            const sessionId = $('sessionId').value;
+            let sessionId = $('sessionId').value;
+
+            // 🔄 Auto-fetch latest session if not manually set or if session looks like default
+            if (!sessionId || sessionId.includes('test-session') || sessionId.length < 30) {
+                addLog('Looking for active session...');
+                const latestSession = await fetchLatestSession(url);
+                if (latestSession) {
+                    sessionId = latestSession;
+                    $('sessionId').value = latestSession;
+                } else {
+                    addLog('No active session found. Please start the Agent first.');
+                    return;
+                }
+            }
 
             addLog(`Connecting to ${url}...`);
 

@@ -423,8 +423,23 @@ class RemoteAgent:
         self.reconnect_attempts = 0
         self.reconnect_delay = 3
         
+    async def create_session(self):
+        """HTTP API로 새 세션 생성"""
+        try:
+            api_base = CONFIG.relay_url.replace("ws://", "http://").replace("wss://", "https://").replace("/ws/relay", "")
+            async with aiohttp.ClientSession() as session:
+                async with session.post(f"{api_base}/api/sessions", json={}) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        new_session = data.get("sessionId")
+                        print(f"[AGENT] Created new session: {new_session}")
+                        return new_session
+        except Exception as e:
+            print(f"[AGENT] Failed to create session: {e}")
+        return None
+        
     async def connect(self):
-        """릴레이 서버에 연결 (지수 백오프 재연결)"""
+        """릴레이 서버에 연결 (자동 세션 생성 + 지수 백오프 재연결)"""
         print(f"[AGENT] Connecting to {CONFIG.relay_url}...")
         
         while self.reconnect_attempts < self.MAX_RECONNECT_ATTEMPTS:
@@ -449,6 +464,17 @@ class RemoteAgent:
                     self.reconnect_attempts = 0
                     self.reconnect_delay = 3
                     return True
+                elif data.get("type") == "error" and "Invalid session" in str(data.get("message", "")):
+                    # 세션 만료 - 새 세션 자동 생성
+                    print("[AGENT] Session expired, creating new session...")
+                    await self.ws.close()
+                    new_session = await self.create_session()
+                    if new_session:
+                        CONFIG.session_id = new_session
+                        continue  # 새 세션으로 재시도
+                    else:
+                        print("[AGENT] Failed to create new session")
+                        return False
                 else:
                     print(f"[AGENT] Auth failed: {data}")
                     return False
