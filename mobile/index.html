@@ -1209,13 +1209,18 @@
                 }
             };
 
-            state.ws.onmessage = (event) => {
+            state.ws.onmessage = async (event) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    console.log('[WS] Received:', data.type, data);
+                    let text;
+                    if (event.data instanceof Blob) {
+                        text = await event.data.text();
+                    } else {
+                        text = event.data;
+                    }
+                    const data = JSON.parse(text);
                     handleMessage(data);
                 } catch (e) {
-                    console.error('Parse error:', e, event.data);
+                    console.error('Parse error:', e);
                 }
             };
 
