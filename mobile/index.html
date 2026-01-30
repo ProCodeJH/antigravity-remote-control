@@ -692,9 +692,98 @@
             border-radius: 50%;
             border: none;
             background: var(--accent);
-            color: white;
+            color: #000;
             font-size: 20px;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .chat-send:disabled {
+            background: var(--border);
+            color: var(--text-muted);
+        }
+
+        .chat-send svg {
+            stroke: currentColor;
+        }
+
+        /* Window Selector */
+        .window-selector {
+            margin-bottom: 16px;
+        }
+
+        .window-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .refresh-windows-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .window-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .window-item {
+            padding: 10px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .window-item:hover {
+            border-color: var(--accent);
+        }
+
+        .window-item.selected {
+            border-color: var(--accent);
+            background: rgba(0, 212, 170, 0.1);
+        }
+
+        .selected-window {
+            padding: 8px 12px;
+            background: rgba(0, 212, 170, 0.1);
+            border: 1px solid var(--accent);
+            border-radius: var(--radius-md);
+            margin-bottom: 12px;
+            font-size: 12px;
+        }
+
+        .selected-label {
+            color: var(--text-secondary);
+            margin-right: 8px;
+        }
+
+        .selected-title {
+            color: var(--accent);
+            font-weight: 500;
         }
 
         /* Log Viewer */
@@ -805,14 +894,48 @@
 
         <!-- Chat Panel -->
         <div class="panel" id="chatPanel">
+            <!-- Window Selector -->
+            <div class="window-selector">
+                <div class="window-header">
+                    <span>Select Window</span>
+                    <button class="refresh-windows-btn" id="refreshWindowsBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16"
+                            height="16">
+                            <path d="M1 4v6h6" />
+                            <path d="M23 20v-6h-6" />
+                            <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="window-list" id="windowList">
+                    <p style="color: var(--text-secondary); text-align: center; padding: 20px;">
+                        Tap refresh to load windows
+                    </p>
+                </div>
+            </div>
+
+            <!-- Selected Window Info -->
+            <div class="selected-window" id="selectedWindow" style="display: none;">
+                <span class="selected-label">Sending to:</span>
+                <span class="selected-title" id="selectedWindowTitle">-</span>
+            </div>
+
+            <!-- Chat Messages -->
             <div class="chat-messages" id="chatMessages">
                 <p style="color: var(--text-secondary); text-align: center; margin-top: 32px;">
-                    Send commands to Antigravity
+                    Select a window to start chatting
                 </p>
             </div>
+
+            <!-- Chat Input -->
             <div class="chat-input-container">
-                <input type="text" class="chat-input" id="chatInput" placeholder="Enter command...">
-                <button class="chat-send" id="chatSend">➤</button>
+                <input type="text" class="chat-input" id="chatInput" placeholder="Enter message..." disabled>
+                <button class="chat-send" id="chatSend" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    </svg>
+                </button>
             </div>
         </div>
 
@@ -1182,6 +1305,17 @@
 
                 case 'audio_error':
                     handleAudioError(data);
+                    break;
+
+                // Window Management Events
+                case 'window_list':
+                    handleWindowList(data.windows || []);
+                    break;
+
+                case 'window_chat_result':
+                    if (!data.success) {
+                        showToast('Message failed: ' + (data.error || 'Unknown'));
+                    }
                     break;
             }
         }
@@ -1997,6 +2131,109 @@
 
         // Hide chat input initially
         document.querySelector('.chat-input-container').style.display = 'none';
+
+        // ============================================================================
+        // Window Chat
+        // ============================================================================
+        let selectedWindowId = null;
+        let selectedWindowTitle = null;
+        let windowList = [];
+
+        // Request window list from agent
+        function refreshWindowList() {
+            if (state.connected && state.ws) {
+                state.ws.send(JSON.stringify({ type: 'list_windows' }));
+                $('windowList').innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 10px;">Loading...</p>';
+            } else {
+                $('windowList').innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 10px;">Connect first</p>';
+            }
+        }
+
+        // Handle window list response
+        function handleWindowList(windows) {
+            windowList = windows;
+            const container = $('windowList');
+
+            if (windows.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 20px;">No Antigravity windows found</p>';
+                return;
+            }
+
+            container.innerHTML = windows.map(w => `
+                <div class="window-item ${w.id === selectedWindowId ? 'selected' : ''}" 
+                     data-id="${w.id}" data-title="${w.title}">
+                    ${w.title}
+                </div>
+            `).join('');
+
+            // Add click handlers
+            container.querySelectorAll('.window-item').forEach(item => {
+                item.addEventListener('click', () => selectWindow(item.dataset.id, item.dataset.title));
+            });
+        }
+
+        // Select a window for chatting
+        function selectWindow(windowId, title) {
+            selectedWindowId = windowId;
+            selectedWindowTitle = title;
+
+            // Update UI
+            document.querySelectorAll('.window-item').forEach(el => {
+                el.classList.toggle('selected', el.dataset.id === windowId);
+            });
+
+            $('selectedWindow').style.display = 'block';
+            $('selectedWindowTitle').textContent = title;
+
+            // Enable input
+            $('chatInput').disabled = false;
+            $('chatSend').disabled = false;
+            $('chatInput').placeholder = `Message to ${title.substring(0, 20)}...`;
+            $('chatInput').focus();
+        }
+
+        // Send message to selected window
+        function sendWindowChat() {
+            const message = $('chatInput').value.trim();
+            if (!message || !selectedWindowId || !state.ws) return;
+
+            state.ws.send(JSON.stringify({
+                type: 'window_chat',
+                windowId: selectedWindowId,
+                message: message
+            }));
+
+            // Add to chat display
+            const chatContainer = $('chatMessages');
+            const msgDiv = document.createElement('div');
+            msgDiv.style.cssText = 'padding: 8px 12px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 8px;';
+            msgDiv.innerHTML = `<span style="color: var(--accent); font-size: 11px;">→ ${selectedWindowTitle}</span><br><span style="color: var(--text-primary);">${message}</span>`;
+            chatContainer.appendChild(msgDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            $('chatInput').value = '';
+        }
+
+        // Add event listeners
+        $('refreshWindowsBtn').addEventListener('click', refreshWindowList);
+        $('chatSend').addEventListener('click', sendWindowChat);
+        $('chatInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendWindowChat();
+        });
+
+        // Handle window_list messages in ws.onmessage
+        const originalOnMessage = handleWebSocketMessage;
+        function handleWebSocketMessage(data) {
+            if (data.type === 'window_list') {
+                handleWindowList(data.windows || []);
+            } else if (data.type === 'window_chat_result') {
+                if (!data.success) {
+                    showToast('Message failed: ' + (data.error || 'Unknown error'));
+                }
+            } else if (originalOnMessage) {
+                originalOnMessage(data);
+            }
+        }
 
         addLog('Remote Control initialized');
     </script>

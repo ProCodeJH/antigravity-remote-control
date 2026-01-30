@@ -268,6 +268,100 @@ class ClipboardSync:
             return False
 
 # ============================================================================
+# Window Manager (for Antigravity window enumeration)
+# ============================================================================
+class WindowManager:
+    """Windows API를 사용하여 Antigravity 창 열거 및 메시지 전송"""
+    
+    def __init__(self):
+        try:
+            import win32gui
+            import win32con
+            import win32api
+            self.win32gui = win32gui
+            self.win32con = win32con
+            self.win32api = win32api
+            self.available = True
+        except ImportError:
+            print("[WINDOW] win32gui not available, window features disabled")
+            self.available = False
+        self.windows = {}
+    
+    def list_antigravity_windows(self) -> list:
+        """열려있는 Antigravity 관련 창 목록 조회"""
+        if not self.available:
+            return []
+            
+        self.windows = {}
+        windows = []
+        
+        def enum_callback(hwnd, _):
+            if self.win32gui.IsWindowVisible(hwnd):
+                title = self.win32gui.GetWindowText(hwnd)
+                # Antigravity 또는 Claude/ChatGPT 등 AI 관련 창 필터링
+                keywords = ['antigravity', 'claude', 'chatgpt', 'gemini', 'copilot', 'cursor']
+                if any(kw.lower() in title.lower() for kw in keywords):
+                    window_id = str(hwnd)
+                    self.windows[window_id] = hwnd
+                    windows.append({
+                        "id": window_id,
+                        "title": title[:50],  # 제목 길이 제한
+                        "hwnd": hwnd
+                    })
+            return True
+        
+        try:
+            self.win32gui.EnumWindows(enum_callback, None)
+        except Exception as e:
+            print(f"[WINDOW] Enum error: {e}")
+            
+        print(f"[WINDOW] Found {len(windows)} Antigravity windows")
+        return windows
+    
+    def send_message_to_window(self, window_id: str, message: str) -> dict:
+        """특정 창에 메시지 전송 (창 활성화 후 타이핑)"""
+        if not self.available:
+            return {"success": False, "error": "win32gui not available"}
+            
+        try:
+            hwnd = self.windows.get(window_id)
+            if not hwnd:
+                return {"success": False, "error": f"Window {window_id} not found"}
+            
+            # 창 활성화
+            self.win32gui.SetForegroundWindow(hwnd)
+            time.sleep(0.3)
+            
+            # 메시지 타이핑
+            pyautogui.typewrite(message, interval=0.02) if message.isascii() else pyautogui.write(message)
+            
+            # Enter 키 전송
+            pyautogui.press('enter')
+            
+            print(f"[WINDOW] Sent message to window {window_id}: {message[:30]}...")
+            return {"success": True, "windowId": window_id}
+            
+        except Exception as e:
+            print(f"[WINDOW] Send error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def focus_window(self, window_id: str) -> dict:
+        """특정 창 포커스"""
+        if not self.available:
+            return {"success": False, "error": "win32gui not available"}
+            
+        try:
+            hwnd = self.windows.get(window_id)
+            if not hwnd:
+                return {"success": False, "error": f"Window {window_id} not found"}
+            
+            self.win32gui.SetForegroundWindow(hwnd)
+            return {"success": True, "windowId": window_id}
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+# ============================================================================
 # Antigravity Bridge
 # ============================================================================
 class AntigravityBridge:
@@ -323,6 +417,7 @@ class RemoteAgent:
         self.clipboard = ClipboardSync()
         self.file_transfer = FileTransferManager()
         self.audio_streamer = AudioStreamer()
+        self.window_manager = WindowManager()  # NEW: Window enumeration
         self.ws: Optional[websockets.WebSocketClientProtocol] = None
         self.running = False
         self.reconnect_attempts = 0
@@ -499,6 +594,36 @@ class RemoteAgent:
                 elif msg_type == "audio_stop":
                     # 오디오 스트리밍 중지 요청
                     await self.audio_streamer.stop()
+                
+                # ============================================================
+                # Window Management Events
+                # ============================================================
+                elif msg_type == "list_windows":
+                    # Antigravity 창 목록 요청
+                    windows = self.window_manager.list_antigravity_windows()
+                    await self.ws.send(json.dumps({
+                        "type": "window_list",
+                        "windows": windows
+                    }))
+                    
+                elif msg_type == "window_chat":
+                    # 특정 창에 메시지 전송
+                    result = self.window_manager.send_message_to_window(
+                        data.get("windowId"),
+                        data.get("message", "")
+                    )
+                    await self.ws.send(json.dumps({
+                        "type": "window_chat_result",
+                        **result
+                    }))
+                    
+                elif msg_type == "window_focus":
+                    # 특정 창 포커스
+                    result = self.window_manager.focus_window(data.get("windowId"))
+                    await self.ws.send(json.dumps({
+                        "type": "window_focus_result",
+                        **result
+                    }))
                     
             except websockets.ConnectionClosed:
                 print("[AGENT] Connection closed")
