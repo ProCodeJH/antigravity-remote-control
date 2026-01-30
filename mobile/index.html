@@ -1199,6 +1199,7 @@
 
             state.ws.onopen = () => {
                 addLog('WebSocket connected, authenticating...');
+                addLog(`Using session: ${sessionId}`);
                 if (state.ws.readyState === WebSocket.OPEN) {
                     state.ws.send(JSON.stringify({
                         type: 'auth',
@@ -1211,9 +1212,10 @@
             state.ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
+                    console.log('[WS] Received:', data.type, data);
                     handleMessage(data);
                 } catch (e) {
-                    console.error('Parse error:', e);
+                    console.error('Parse error:', e, event.data);
                 }
             };
 
