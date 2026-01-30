@@ -20,26 +20,26 @@
         }
 
         :root {
-            /* Notion Dark Mode Palette */
-            --bg-primary: #191919;
-            --bg-secondary: #252525;
-            --bg-elevated: #2f2f2f;
+            /* Unique Dark Palette (AnyDesk/Parsec inspired) */
+            --bg-primary: #1a1d21;
+            --bg-secondary: #22262b;
+            --bg-elevated: #2a2f35;
 
             /* Borders */
-            --border: #333333;
-            --border-light: #404040;
+            --border: #2e3338;
+            --border-light: #3a4045;
 
             /* Text */
-            --text-primary: #D4D4D4;
-            --text-secondary: #9B9B9B;
-            --text-muted: #6B6B6B;
+            --text-primary: #e8eaed;
+            --text-secondary: #9aa0a6;
+            --text-muted: #5f6368;
 
-            /* Notion Accent Colors */
-            --accent: #447ACB;
-            --accent-hover: #5A8FD4;
-            --success: #4F9768;
-            --warning: #C19138;
-            --danger: #BE524B;
+            /* Teal Accent (Unique) */
+            --accent: #00d4aa;
+            --accent-hover: #00e6b8;
+            --success: #00d4aa;
+            --warning: #fbbf24;
+            --danger: #ef4444;
 
             /* Sizing */
             --radius-sm: 4px;
@@ -61,7 +61,7 @@
         }
 
         /* ================================================================
-           HEADER (Notion Style)
+           HEADER
            ================================================================ */
         .header {
             position: fixed;
@@ -78,20 +78,35 @@
             z-index: 100;
         }
 
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--accent);
+        }
+
         .logo {
             display: flex;
             align-items: center;
-            gap: 8px;
-            font-size: 15px;
-            font-weight: 600;
-            color: var(--text-primary);
+            gap: 10px;
         }
 
-        .logo-icon {
-            font-size: 18px;
+        .logo-badge {
+            background: var(--accent);
+            color: #000;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
         }
 
         .logo-text {
+            font-size: 14px;
+            font-weight: 500;
             color: var(--text-primary);
         }
 
@@ -221,16 +236,26 @@
             width: 40px;
             height: 40px;
             border-radius: var(--radius-md);
-            border: none;
+            border: 1px solid var(--border);
             background: var(--bg-primary);
             color: var(--text-primary);
-            font-size: 16px;
+            font-size: 11px;
+            font-weight: 500;
             cursor: pointer;
-            transition: background 0.15s;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .quick-btn svg {
+            width: 18px;
+            height: 18px;
         }
 
         .quick-btn:hover {
             background: var(--bg-elevated);
+            border-color: var(--border-light);
         }
 
         .quick-btn:active {
@@ -239,7 +264,8 @@
 
         .quick-btn.active {
             background: var(--accent);
-            color: white;
+            border-color: var(--accent);
+            color: #000;
         }
 
         /* Quality Control Bar */
@@ -463,19 +489,24 @@
         }
 
         .nav-item.active {
-            color: var(--text-primary);
+            color: var(--accent);
         }
 
         .nav-icon {
-            font-size: 20px;
+            width: 20px;
+            height: 20px;
         }
 
         /* Connect button */
         #connectBtn {
             background: var(--accent);
-            color: white !important;
+            color: #000 !important;
             border-radius: var(--radius-md);
             margin: 4px;
+        }
+
+        #connectBtn svg {
+            stroke: #000;
         }
 
         /* Virtual Keyboard */
@@ -709,8 +740,8 @@
     <!-- Header -->
     <header class="header">
         <div class="logo">
-            <div class="logo-icon">⚡</div>
-            <span class="logo-text">Antigravity</span>
+            <span class="logo-badge">AG</span>
+            <span class="logo-text">Remote</span>
         </div>
         <div class="status-indicator">
             <div class="status-dot-wrapper">
@@ -742,7 +773,7 @@
 
         <!-- Status Panel -->
         <div class="panel" id="statusPanel">
-            <h3 style="margin-bottom: 16px;">📊 System Status</h3>
+            <h3 style="margin-bottom: 16px;">System Status</h3>
             <div class="status-grid">
                 <div class="status-card">
                     <div class="label">CPU Usage</div>
@@ -820,20 +851,51 @@
 
     <!-- Quick Action Bar -->
     <div class="quick-bar" id="quickBar">
-        <button class="quick-btn" id="btnRightClick" title="Right Click">🖱️</button>
-        <button class="quick-btn" id="btnKeyboard" title="Keyboard">⌨️</button>
-        <button class="quick-btn" id="btnClipboard" title="Sync Clipboard">📋</button>
-        <button class="quick-btn" id="btnAudio" title="Audio">🔇</button>
-        <button class="quick-btn" id="btnEsc" title="ESC">✕</button>
-        <button class="quick-btn" id="btnTab" title="TAB">⇥</button>
-        <button class="quick-btn" id="btnEnter" title="Enter">↵</button>
+        <button class="quick-btn" id="btnRightClick" title="Right Click">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 4h6v8H4z" />
+                <path d="M14 4h6v16H14z" />
+                <path d="M4 16h6v4H4z" />
+            </svg>
+        </button>
+        <button class="quick-btn" id="btnKeyboard" title="Keyboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="4" width="20" height="16" rx="2" />
+                <line x1="6" y1="8" x2="6" y2="8" />
+                <line x1="10" y1="8" x2="10" y2="8" />
+                <line x1="14" y1="8" x2="14" y2="8" />
+                <line x1="18" y1="8" x2="18" y2="8" />
+                <line x1="6" y1="16" x2="18" y2="16" />
+            </svg>
+        </button>
+        <button class="quick-btn" id="btnClipboard" title="Sync Clipboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="8" y="2" width="8" height="4" rx="1" />
+                <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2" />
+            </svg>
+        </button>
+        <button class="quick-btn" id="btnAudio" title="Audio">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+            </svg>
+        </button>
+        <button class="quick-btn" id="btnEsc" title="ESC">Esc</button>
+        <button class="quick-btn" id="btnTab" title="TAB">Tab</button>
+        <button class="quick-btn" id="btnEnter" title="Enter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 10l-5 5 5 5" />
+                <path d="M20 4v11H4" />
+            </svg>
+        </button>
     </div>
 
     <!-- Quality Control Bar -->
     <div class="quality-bar" id="qualityBar">
-        <button class="quality-btn" data-quality="low" title="Low Quality">📉</button>
-        <button class="quality-btn active" data-quality="auto" title="Auto Quality">🔄</button>
-        <button class="quality-btn" data-quality="high" title="High Quality">📈</button>
+        <button class="quality-btn" data-quality="low" title="Low Quality">LQ</button>
+        <button class="quality-btn active" data-quality="auto" title="Auto Quality">Auto</button>
+        <button class="quality-btn" data-quality="high" title="High Quality">HQ</button>
     </div>
 
     <!-- Virtual Keyboard -->
@@ -895,23 +957,38 @@
     <!-- Bottom Navigation -->
     <nav class="bottom-nav">
         <div class="nav-item active" data-panel="screenPanel">
-            <span class="nav-icon">🖥️</span>
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <line x1="8" y1="21" x2="16" y2="21" />
+                <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
             <span>Screen</span>
         </div>
         <div class="nav-item" data-panel="statusPanel">
-            <span class="nav-icon">📊</span>
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="20" x2="18" y2="10" />
+                <line x1="12" y1="20" x2="12" y2="4" />
+                <line x1="6" y1="20" x2="6" y2="14" />
+            </svg>
             <span>Status</span>
         </div>
         <div class="nav-item" data-panel="filesPanel">
-            <span class="nav-icon">📁</span>
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+            </svg>
             <span>Files</span>
         </div>
         <div class="nav-item" data-panel="chatPanel">
-            <span class="nav-icon">💬</span>
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+            </svg>
             <span>Chat</span>
         </div>
         <div class="nav-item" id="connectBtn">
-            <span class="nav-icon">🔌</span>
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14" />
+                <path d="M12 5l7 7-7 7" />
+            </svg>
             <span>Connect</span>
         </div>
     </nav>
@@ -919,7 +996,7 @@
     <!-- Connect Modal -->
     <div class="modal" id="connectModal">
         <div class="modal-content">
-            <h2>🔗 Connect</h2>
+            <h2>Connect</h2>
             <div class="input-group">
                 <label>Server URL</label>
                 <input type="text" id="serverUrl" value="ws://localhost:8080/ws/relay" placeholder="ws://...">
