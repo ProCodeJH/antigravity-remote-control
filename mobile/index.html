@@ -811,6 +811,64 @@
             z-index: 101;
         }
 
+        /* 🚀 Enterprise: Latency Display */
+        .latency-display {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .latency-value {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            min-width: 40px;
+            text-align: right;
+            transition: color 0.3s ease;
+        }
+
+        .quality-bars {
+            display: flex;
+            gap: 2px;
+            align-items: flex-end;
+        }
+
+        .quality-bar {
+            width: 3px;
+            background: var(--border-light);
+            border-radius: 1px;
+            transition: background 0.3s ease, height 0.3s ease;
+        }
+
+        .quality-bar:nth-child(1) {
+            height: 6px;
+        }
+
+        .quality-bar:nth-child(2) {
+            height: 9px;
+        }
+
+        .quality-bar:nth-child(3) {
+            height: 12px;
+        }
+
+        .quality-bar:nth-child(4) {
+            height: 15px;
+        }
+
+        .quality-bar.active {
+            background: var(--success);
+        }
+
+        .quality-bar.active:nth-child(1) {
+            background: var(--danger);
+        }
+
+        .quality-bar.active:nth-child(2) {
+            background: var(--warning);
+        }
+
         @keyframes clickFade {
             from {
                 transform: scale(1);
@@ -1144,7 +1202,12 @@
             lastPing: 0,
             frameCount: 0,
             lastFrameTime: 0,
-            fps: 0
+            fps: 0,
+            // 🚀 Enterprise metrics
+            latency: 0,
+            connectionQuality: 'excellent', // excellent, good, fair, poor
+            serverVersion: null,
+            bytesReceived: 0
         };
 
         // ============================================================================
@@ -1165,6 +1228,61 @@
             log.innerHTML += `<div>[${time}] ${msg}</div>`;
             log.scrollTop = log.scrollHeight;
             console.log(`[LOG] ${msg}`);
+        }
+
+        // ============================================================================
+        // 🚀 Enterprise Connection Status & Latency
+        // ============================================================================
+        function updateLatencyDisplay(latency) {
+            const latencyEl = $('latencyDisplay');
+            if (latencyEl) {
+                latencyEl.textContent = `${latency}ms`;
+
+                // Update connection quality
+                let quality = 'excellent';
+                let color = 'var(--success)';
+
+                if (latency > 200) {
+                    quality = 'poor';
+                    color = 'var(--danger)';
+                } else if (latency > 100) {
+                    quality = 'fair';
+                    color = 'var(--warning)';
+                } else if (latency > 50) {
+                    quality = 'good';
+                    color = 'var(--accent)';
+                }
+
+                state.connectionQuality = quality;
+                latencyEl.style.color = color;
+
+                const qualityBars = document.querySelectorAll('.quality-bar');
+                qualityBars.forEach((bar, i) => {
+                    if (quality === 'excellent') bar.classList.toggle('active', i < 4);
+                    else if (quality === 'good') bar.classList.toggle('active', i < 3);
+                    else if (quality === 'fair') bar.classList.toggle('active', i < 2);
+                    else bar.classList.toggle('active', i < 1);
+                });
+            }
+        }
+
+        function setConnectionStatus(connected) {
+            state.connected = connected;
+            const dot = document.querySelector('.status-dot');
+            const text = document.querySelector('.status-text');
+
+            if (dot) {
+                dot.classList.toggle('connected', connected);
+            }
+            if (text) {
+                text.textContent = connected ? 'Connected' : 'Disconnected';
+            }
+
+            // Show/hide waiting indicator
+            const waiting = $('waitingIndicator');
+            if (waiting) {
+                waiting.style.display = connected ? 'none' : 'flex';
+            }
         }
 
         // ============================================================================
@@ -1268,8 +1386,34 @@
 
         function handleMessage(data) {
             switch (data.type) {
+                // 🚀 ENTERPRISE: Heartbeat ping/pong
+                case 'ping':
+                    // Respond with pong immediately
+                    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                        state.ws.send(JSON.stringify({
+                            type: 'pong',
+                            timestamp: data.timestamp
+                        }));
+                        // Calculate and display latency
+                        const latency = Date.now() - data.timestamp;
+                        state.latency = latency;
+                        updateLatencyDisplay(latency);
+                    }
+                    break;
+
+                case 'session_expired':
+                case 'session_terminated':
+                    addLog('⚠️ Session expired/terminated');
+                    setConnectionStatus(false);
+                    showToast('Session ended - reconnecting...');
+                    setTimeout(() => connect(), 2000);
+                    break;
+
                 case 'auth_success':
-                    addLog(`Authenticated: ${data.sessionId}`);
+                    addLog(`✅ Authenticated: ${data.sessionId.slice(0, 8)}...`);
+                    if (data.serverVersion) {
+                        addLog(`Server: ${data.serverVersion}`);
+                    }
                     setConnectionStatus(true);
                     $('connectModal').classList.remove('visible');
                     break;
@@ -1283,7 +1427,8 @@
                     break;
 
                 case 'peer_connected':
-                    addLog('PC Agent connected!');
+                    addLog('🖥️ PC Agent connected!');
+                    showToast('Agent connected!');
                     break;
 
                 case 'peer_disconnected':
